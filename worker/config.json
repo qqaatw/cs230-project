@@ -1,0 +1,14 @@
+{
+    "broker" : {
+        "broker_host": "3.135.226.176",
+        "broker_port": "5673",
+        "topics": {
+            "broker_scheduling_topic": "node_1_scheduling"
+        }
+    },
+    "env": {
+        "name": "worker_env",
+        "path": "configuration.yaml"
+    }
+
+}
