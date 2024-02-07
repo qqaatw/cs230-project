@@ -1,50 +1,16 @@
+from cs230_common.messenger import PikaMessenger
 import json
-import pika
-import time
-import threading
-import functools
 import subprocess
 import logging
 
 logging.basicConfig(level = logging.DEBUG)
 
-class PikaMassenger():
-
-    def __init__(self, broker_host, broker_port, topics):
-        self.conn = pika.BlockingConnection(pika.ConnectionParameters(host=broker_host, port=broker_port))
-        self.channel = self.conn.channel()
-        self.topics = topics
-        for topic in topics:
-            self.channel.queue_declare(queue=topic)
-    
-    def callback(ch, method, properties, body):
-        print(" [x] %r:%r consumed" % (method.routing_key, body))
-
-    def consume(self):
-        result = self.channel.queue_declare('', auto_delete=True)
-        #queue_name = result.method.queue
-        #for key in keys:
-            #self.channel.queue_bind(
-                #exchange=self.exchange_name, 
-                #queue=queue_name,
-                #routing_key=key)
-
-        for topic in self.topics:
-            print(f"topic: {topic}")
-            self.channel.basic_consume(
-                queue=topic, 
-                on_message_callback=self.callback,
-                auto_ack=True)
-            
-        print("Start consuming")
-        self.channel.start_consuming()
-
 class CondaManager():
-    def __init__(self, name, path):
+    def __init__(self, name: str, path: str):
         self.name = name
         self.path = path
 
-    def check_env_existing(self, delete=True):
+    def check_env_existing(self, delete: bool = True):
         result = subprocess.run(f"conda env list".split(" "), capture_output=True, text=True)
         for line in result.stdout.split('\n'):
             if line.split(' ')[0] == self.name:
@@ -70,21 +36,15 @@ def main():
     with open("config.json", "r") as f:
         config = json.load(f)
     
-    conda_manager = CondaManager(config["env"]["name"], config["env"]["path"])
-    conda_manager.build()
+    #conda_manager = CondaManager(config["env"]["name"], config["env"]["path"])
+    #conda_manager.build()
 
-    consumer = PikaMassenger(broker_host=config["broker"]["broker_host"], broker_port=config["broker"]["broker_port"], topics= [v for v in config["broker"]["topics"].values()])
-    consumer_thread = threading.Thread(target=consumer.consume, daemon=None)
-    consumer_thread.start()
+    consumer = PikaMessenger(
+        broker_host=config["broker"]["broker_host"],
+        broker_port=config["broker"]["broker_port"],
+        topics= [v for v in config["broker"]["topics"].values()])
 
-
-
-    try:
-        while True:
-            time.sleep(10)
-    except (KeyboardInterrupt, SystemExit):
-        consumer.channel.stop_consuming()
-        consumer.conn.close()
+    consumer.consume()
 
 def test():
     with open("config.json", "r") as f:
