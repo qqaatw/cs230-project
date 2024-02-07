@@ -27,7 +27,7 @@ class CondaManager():
         result = subprocess.run(command, capture_output=True, text=True)
         print(result.stdout, result.stderr)
         
-        if not self.check_env_existing(self, delete=False):
+        if not self.check_env_existing(delete=False):
             raise RuntimeError("Environment doesn't exist.")
 
 
