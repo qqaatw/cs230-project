@@ -1,9 +1,14 @@
 from cs230_common.messenger import PikaMessenger
+import sys
 import json
 import subprocess
 import logging
 
 logging.basicConfig(level = logging.DEBUG)
+
+SHELL = False
+if sys.platform.startswith('win'):
+    SHELL = True
 
 class CondaManager():
     def __init__(self, name: str, path: str):
@@ -11,11 +16,11 @@ class CondaManager():
         self.path = path
 
     def check_env_existing(self, delete: bool = True):
-        result = subprocess.run(f"conda env list".split(" "), capture_output=True, text=True)
+        result = subprocess.run(f"conda env list".split(" "), capture_output=True, text=True, shell=SHELL)
         for line in result.stdout.split('\n'):
             if line.split(' ')[0] == self.name:
                 if delete:
-                    subprocess.run(f"conda env remove -n {self.name} -y".split(" "))
+                    subprocess.run(f"conda env remove -n {self.name} -y".split(" "), shell=SHELL)
                     return False
                 return True
         return False
@@ -24,13 +29,11 @@ class CondaManager():
         self.check_env_existing(delete=True)
         command = f"conda env create -f {self.path}".split(" ")
         print(command)
-        result = subprocess.run(command, capture_output=True, text=True)
+        result = subprocess.run(command, capture_output=True, text=True, shell=SHELL)
         print(result.stdout, result.stderr)
         
         if not self.check_env_existing(delete=False):
             raise RuntimeError("Environment doesn't exist.")
-
-
 
 def main():
     with open("config.json", "r") as f:
