@@ -61,7 +61,7 @@ class FTPScheduler:
         
     def run(self):
         self.connect_to_ftp()
-        self.messenger.consume()      # TODO : Should identify ONLY the messages from API (e.g.: if message['type'] == 'api':)
+        self.messenger.consume()      # TODO : Should identify ONLY the messages from API (e.g.: if message['host'] == 'api':)
     
     def cleanup(self):
         self.ftp.quit()      # TODO : Add what is needed after disconnecting FTP server
@@ -93,7 +93,7 @@ def scheduler_main():
     messenger = PikaMessenger(broker_host=HOST, broker_port=PORT, receive_topics=TOPICs, 
                               callback=lambda channel, method, 
                               body: callback_with_args)  
-    messenger.consume()
+    messenger.consume()     # TODO : Should identify ONLY the messages from WORKER (e.g.: if message['host'] == 'worker_*':)
                       
     for task_id,filename in tasks.items():
         available_worker_id = find_available_worker_id(ongoing_tasks)
