@@ -12,14 +12,14 @@ from cs230_common.messenger import PikaMessenger
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
 
-HOST = "18.223.214.228"
-PORT = "5673"
+PIKA_HOST = "18.223.152.106"
+PIKA_PORT = "5673"
 
 # 1. Consume message from API, Fetch file from FTP server, Create task_id & Add file to the new_tasks
 
 
 class FTPScheduler:
-    def __init__(self, host, port, username, password, remote_dir, receive_topics, broker_host=HOST, broker_port=PORT):
+    def __init__(self, host, port, username, password, remote_dir, receive_topics, broker_host=PIKA_HOST, broker_port=PIKA_PORT):
         self.ftp = FTP()
         self.host = host
         self.port = port
@@ -36,7 +36,9 @@ class FTPScheduler:
     def connect_to_ftp(self):
         self.ftp.connect(self.host, self.port)
         self.ftp.login(self.username, self.password)
-        self.ftp.cwd(self.remote_dir)
+        file = open("C:\\Users\\Kun Woo Park\\workspace\\cs230\\aaa.txt", "rb")
+        self.ftp.storbinary('STOR qqaatw/aaa.txt', file)
+        #self.ftp.cwd(self.remote_dir)
         
     # Fetch file from FTP server
     def fetch_file(self, filename):
@@ -144,6 +146,6 @@ def worker_message_handler(channel, method, body, worker_report_queue, ongoing_t
 
 
 if __name__ == "__main__":
-    ftp_scheduler = FTPScheduler(host="", port="", username="username", password="password", remote_dir="remote_dir", broker_host="", broker_port="", receive_topics=["receive_topic"])
+    ftp_scheduler = FTPScheduler(host="169.234.3.12", port=21, username="kunwp1", password="test", remote_dir="kunwp1", receive_topics=["receive_topic"])
     ftp_scheduler.run()
-    scheduler_main(ftp_scheduler)
+    # scheduler_main(ftp_scheduler)
