@@ -89,7 +89,7 @@ def scheduler_main(ftp_scheduler):
     messenger = PikaMessenger(broker_host=HOST, broker_port=PORT, receive_topics=TOPICs, 
                               callback=lambda channel, method, 
                               body: callback_with_args)  
-    TOPICs = "scheduler_to_worker_1", "scheduler_to_worker_2", "scheduler_to_worker_3"
+    TOPICs = ("scheduler_to_worker_1", "scheduler_to_worker_2", "scheduler_to_worker_3")
     messenger.consume()
                       
     for task_id,filename in tasks.items():
