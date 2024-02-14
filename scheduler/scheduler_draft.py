@@ -14,23 +14,19 @@ LOGGER = logging.getLogger(__name__)
 
 HOST = "18.223.214.228"
 PORT = "5673"
-TOPICs = ["node_1_scheduling"]
-
-
-
 
 # 1. Consume message from API, Fetch file from FTP server, Create task_id & Add file to the new_tasks
 
 
 class FTPScheduler:
-    def __init__(self, host, port, username, password, remote_dir, broker_host, broker_port, receive_topics):
+    def __init__(self, host, port, username, password, remote_dir, receive_topics, broker_host=HOST, broker_port=PORT):
         self.ftp = FTP()
         self.host = host
         self.port = port
         self.username = username
         self.password = password
         self.remote_dir = remote_dir
-        self.receive_topics = receive_topics
+        self.receive_topics = ["api_to_ftp"]
         self.messenger = PikaMessenger(broker_host, broker_port, receive_topics, self.on_new_file_callback)
 
         # New tasks fetched from FTP server (hash table)
@@ -49,7 +45,7 @@ class FTPScheduler:
             self.ftp.retrbinary('RETR ' + filename, file.write)
 
         # Create task_id & Add file to the new_tasks
-        self.task_id += 1      # TODO : Does the scheduler server create task_id? Or the FTP server?
+        self.task_id += 1      # Scheduler creates task_id
         self.new_tasks[self.task_id] = filename
         print(f"Task {filename} fetched from FTP server. Task ID: {self.task_id}")
 
@@ -61,7 +57,7 @@ class FTPScheduler:
         
     def run(self):
         self.connect_to_ftp()
-        self.messenger.consume()      # Should identify ONLY the messages from API (e.g.: if message['host'] == 'api':)
+        self.messenger.consume()
     
     def cleanup(self):
         self.ftp.quit()      # TODO : Add what is needed after disconnecting FTP server
@@ -81,7 +77,7 @@ def find_available_worker_id(ongoing_tasks):
 
 
 # If worker is available put task into ongoing_tasks & if not into waiting_tasks queue
-def scheduler_main():
+def scheduler_main(ftp_scheduler):
     tasks = ftp_scheduler.new_tasks # task_id, filename
     ongoing_tasks = {}
     waiting_tasks_queue = Queue()    
@@ -93,7 +89,8 @@ def scheduler_main():
     messenger = PikaMessenger(broker_host=HOST, broker_port=PORT, receive_topics=TOPICs, 
                               callback=lambda channel, method, 
                               body: callback_with_args)  
-    messenger.consume()     # TODO : Should identify ONLY the messages from WORKER (e.g.: if message['host'] == 'worker_*':)
+    TOPICs = "scheduler_to_worker_1", "scheduler_to_worker_2", "scheduler_to_worker_3"
+    messenger.consume()
                       
     for task_id,filename in tasks.items():
         available_worker_id = find_available_worker_id(ongoing_tasks)
@@ -117,7 +114,9 @@ def worker_message_handler(channel, method, body, worker_report_queue, ongoing_t
                                  waiting_tasks_queue=waiting_tasks_queue)
     messenger = PikaMessenger(broker_host=HOST, broker_port=PORT, receive_topics=TOPICs, 
                               callback=lambda channel, method, 
-                              body: callback_with_args)  
+                              body: callback_with_args)
+    TOPICs = "scheduler_to_worker_1", "scheduler_to_worker_2", "scheduler_to_worker_3"
+    
     LOGGER.info(f"Message received: {body}")
     message = json.loads(body)
     task_id = message['task_id']

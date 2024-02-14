@@ -5,7 +5,7 @@ from cs230_common.messenger import PikaMessenger
 
 logging.basicConfig(level=logging.INFO)
 
-HOST = "18.223.214.228"
+HOST = "18.223.152.106"
 PORT = "5673"
 TOPICs = ["node_1_scheduling"]
 
