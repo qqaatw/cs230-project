@@ -115,7 +115,7 @@ def worker_message_handler(channel, method, body, worker_report_queue, ongoing_t
     messenger = PikaMessenger(broker_host=HOST, broker_port=PORT, receive_topics=TOPICs, 
                               callback=lambda channel, method, 
                               body: callback_with_args)
-    TOPICs = "scheduler_to_worker_1", "scheduler_to_worker_2", "scheduler_to_worker_3"
+    TOPICs = ("scheduler_to_worker_1", "scheduler_to_worker_2", "scheduler_to_worker_3")
     
     LOGGER.info(f"Message received: {body}")
     message = json.loads(body)
