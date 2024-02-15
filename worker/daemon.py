@@ -3,6 +3,7 @@ import sys
 import json
 import subprocess
 import logging
+import os
 
 logging.basicConfig(level = logging.DEBUG)
 
@@ -27,7 +28,13 @@ class CondaManager():
     
     def build(self):
         self.check_env_existing(delete=True)
-        command = f"conda env create -f {self.path}".split(" ")
+        mkdir = f"mkdir env".split()
+        if os.path.exists('env'):
+            raise RuntimeError("Directory `env` already exists.")
+    
+        print(mkdir)
+        result = subprocess.run(mkdir, capture_output=True, text=True, shell=SHELL)
+        command = f"conda env create --prefix env -f {self.path}".split(" ")
         print(command)
         result = subprocess.run(command, capture_output=True, text=True, shell=SHELL)
         print(result.stdout, result.stderr)
