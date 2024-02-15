@@ -19,14 +19,12 @@ PIKA_PORT = "5673"
 
 
 class FTPScheduler:
-    def __init__(self, host, port, username, password, remote_dir, receive_topics, broker_host=PIKA_HOST, broker_port=PIKA_PORT):
+    def __init__(self, host, port, username, password, broker_host=PIKA_HOST, broker_port=PIKA_PORT, receive_topics=["api_to_scheduler"]):
         self.ftp = FTP()
         self.host = host
         self.port = port
         self.username = username
         self.password = password
-        self.remote_dir = remote_dir
-        self.receive_topics = ["api_to_ftp"]
         self.messenger = PikaMessenger(broker_host, broker_port, receive_topics, self.on_new_file_callback)
 
         # New tasks fetched from FTP server (hash table)
@@ -36,27 +34,40 @@ class FTPScheduler:
     def connect_to_ftp(self):
         self.ftp.connect(self.host, self.port)
         self.ftp.login(self.username, self.password)
-        file = open("C:\\Users\\Kun Woo Park\\workspace\\cs230\\aaa.txt", "rb")
-        self.ftp.storbinary('STOR qqaatw/aaa.txt', file)
-        #self.ftp.cwd(self.remote_dir)
-        
-    # Fetch file from FTP server
-    def fetch_file(self, filename):
-        local_filename = os.path.join('temp', filename)
-        with open(local_filename, 'wb') as file:
-            self.ftp.retrbinary('RETR ' + filename, file.write)
+        # file = open("C:/Users/Kun Woo Park/workspace/cs230/aaa.txt", "rb")
+        # self.ftp.storbinary('STOR qqaatw/aaa.txt', file)
 
-        # Create task_id & Add file to the new_tasks
-        self.task_id += 1      # Scheduler creates task_id
-        self.new_tasks[self.task_id] = filename
-        print(f"Task {filename} fetched from FTP server. Task ID: {self.task_id}")
-
+    def create_directory_for_task(self, task_id):
+        directory_name = str(task_id)
+        self.ftp.mkd(directory_name)
+        return directory_name
+    
     # Consume message from API & call 'fetch_file'
     def on_new_file_callback(self, channel, method, body):
         message = json.loads(body)
-        if 'filename' in message:
-            self.fetch_file(message['filename'])
-        
+
+        # When API requested new task to scheduler (API message should contain "request", "filename": f"{file_name}")
+        if 'request' in message:
+            # Create task_id & directory, Add file to the new_tasks
+            self.task_id += 1
+            directory_name = self.create_directory_for_task(self.task_id)
+            self.new_tasks[self.task_id] = message['filename']
+            directory_name_message = json.dumps({"task_id": self.task_id, "directory_name": directory_name})
+            # Send directory_name to API
+            self.messenger.produce(directory_name_message)
+            LOGGER.info(f"Directory {directory_name} created for task ID {self.task_id}. Message sent to API.")
+
+        # When API uploaded file to FTP server (API message should contain "uploaded", "task_id": f"{task_id}")
+        elif 'uploaded' in message:
+            task_id = message['task_id']
+            if task_id in self.new_tasks:
+                filename = self.new_tasks[task_id]
+                directory_name = str(task_id)
+                # Send file location to worker server
+                file_location_message = json.dumps({"task_id": task_id, "file_location": f"{directory_name}/{filename}"})
+                self.messenger.produce(file_location_message)
+                LOGGER.info(f"File {filename} in directory {directory_name} uploaded to FTP server. Message sent to worker.")
+
     def run(self):
         self.connect_to_ftp()
         self.messenger.consume()
@@ -88,10 +99,10 @@ def scheduler_main(ftp_scheduler):
                                  worker_report_queue=worker_report_queue, 
                                  ongoing_tasks=ongoing_tasks, 
                                  waiting_tasks_queue=waiting_tasks_queue)
-    messenger = PikaMessenger(broker_host=HOST, broker_port=PORT, receive_topics=TOPICs, 
+    messenger = PikaMessenger(broker_host=PIKA_HOST, broker_port=PIKA_PORT, receive_topics=TOPICs, 
                               callback=lambda channel, method, 
                               body: callback_with_args)  
-    TOPICs = ("scheduler_to_worker_1", "scheduler_to_worker_2", "scheduler_to_worker_3")
+    TOPICs = ["scheduler_to_worker_1", "scheduler_to_worker_2", "scheduler_to_worker_3"]
     messenger.consume()
                       
     for task_id,filename in tasks.items():
@@ -114,10 +125,10 @@ def worker_message_handler(channel, method, body, worker_report_queue, ongoing_t
                                  worker_report_queue=worker_report_queue, 
                                  ongoing_tasks=ongoing_tasks, 
                                  waiting_tasks_queue=waiting_tasks_queue)
-    messenger = PikaMessenger(broker_host=HOST, broker_port=PORT, receive_topics=TOPICs, 
+    messenger = PikaMessenger(broker_host=PIKA_HOST, broker_port=PIKA_PORT, receive_topics=TOPICs, 
                               callback=lambda channel, method, 
                               body: callback_with_args)
-    TOPICs = ("scheduler_to_worker_1", "scheduler_to_worker_2", "scheduler_to_worker_3")
+    TOPICs = ["scheduler_to_worker_1", "scheduler_to_worker_2", "scheduler_to_worker_3"]
     
     LOGGER.info(f"Message received: {body}")
     message = json.loads(body)
@@ -146,6 +157,6 @@ def worker_message_handler(channel, method, body, worker_report_queue, ongoing_t
 
 
 if __name__ == "__main__":
-    ftp_scheduler = FTPScheduler(host="169.234.3.12", port=21, username="kunwp1", password="test", remote_dir="kunwp1", receive_topics=["receive_topic"])
+    ftp_scheduler = FTPScheduler(host="169.234.3.12", port=21, username="kunwp1", password="test")
     ftp_scheduler.run()
-    # scheduler_main(ftp_scheduler)
+    scheduler_main(ftp_scheduler)
