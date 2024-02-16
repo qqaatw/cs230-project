@@ -2,6 +2,7 @@ from enum import StrEnum, auto
 import json
 
 
+
 class MessageCategory(StrEnum):
     heartbeat = auto()
     queue_request = auto()
@@ -25,6 +26,7 @@ class MessageBuilder:
             "status": status,
             "body": body,
         }
+
         return json.dumps(message)
 
     @staticmethod

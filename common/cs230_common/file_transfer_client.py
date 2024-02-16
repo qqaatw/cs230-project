@@ -30,11 +30,12 @@ class FileTransferClient:
 
     def fetch_file(self, task_id: int):
         zip_filename = str(task_id) + ".zip"
-        ftp_zipfile_path = os.path.join(str(task_id), zip_filename)
+        ftp_zipfile_path = str(task_id) + "/" + zip_filename
         local_file = open(zip_filename, "wb")
 
         try:
             # retrieve the remote file and write it to the local file
+            print(ftp_zipfile_path)
             self.ftp.retrbinary(f"RETR {ftp_zipfile_path}", local_file.write)
         except ftplib.error_perm as e:
             print("Error:", e)

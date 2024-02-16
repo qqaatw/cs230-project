@@ -6,11 +6,11 @@ import json
 import subprocess
 import logging
 import os
-import threading
 import time
 import tempfile
+import shutil
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 SHELL = False
 if sys.platform.startswith("win"):
@@ -42,65 +42,74 @@ Worker thread receives message in a json format from scheduler, parse the json s
 """
 
 
-def worker_main():
+def main():
     with open("config.json", "r") as f:
         config = json.load(f)
 
     messenger = PikaMessenger(
         broker_host=config["broker"]["broker_host"],
         broker_port=config["broker"]["broker_port"],
-        topics=["worker_to_scheduler"],
+        receive_topics=["worker_to_scheduler"],
     )
 
     # create a thread to receive messages and put them in the queue
-    messenger.comsume()
+    messenger.consume()
 
-    processes = {}
-
+    try:
+        worker_main(config, messenger)
+    except KeyboardInterrupt:
+        messenger.stop_consuming()
+    finally:
+        del messenger
+        
+def worker_main(config, messenger):
+    process = {}
     while True:
-        for tid, p in processes:
-            exit_code = p.poll()
+        for key in process:
+            task_id = key[0]
+            env = key[1]
+            exit_code = process[key].poll()
             if exit_code is not None:
-                p.terminate()
-                msg_body = json.dumps({"task_id": tid, "status": exit_code})
+                process[key].terminate()
+                shutil.rmtree(env)
+                shutil.rmtree(str(task_id))
+                msg_body = {"task_id": task_id, "status": exit_code}
                 messenger.produce(
-                    MessageBuilder.build(MessageCategory.task_status, msg_body)
+                    MessageBuilder.build(MessageCategory.task_status, msg_body), "worker_to_scheduler"
                 )
 
         if messenger.q.empty():
             time.sleep(1)
             continue
 
-        json_string = messenger.q.get()
+        _, json_string = messenger.q.get()
         data = json.loads(json_string)
         if data["CATEGORY"] == MessageCategory.scheduled_task:
-            task_id = data["task_id"]
-            p = run_task(data["body"], config)
-            processes[task_id] = p
+            task_id = data["body"]["task_id"]
+            p, env = run_task(data["body"], config)
+            process[(task_id, env)] = p
         else:
             raise RuntimeError(
-                f"This is not the message expected from the worker: {0}"
-            ).format(data["command"])
+                f"This is not the message expected from the worker.")
 
 
-def run_task(msg_body, config):
-    data = json.loads(msg_body)
-    task_id = data["task_id"]
+def run_task(body, config):
+    task_id = body["task_id"]
     FTPServer = FileTransferClient(
-        host="192.168.0.186", port=21, username="kunwp1", password="test"
+        host="18.223.152.106", port=21, username="kunwp1", password="test"
     )
     FTPServer.fetch_file(task_id)
-
     conda_manager = CondaManager(config["env"]["name"], config["env"]["path"])
     tempdir_name = conda_manager.build()
-
-    os.chdir(task_id)
+    
+    os.chdir(str(task_id))
     conda_command = (
-        f"conda run -n {os.path.join(os.path.dirname(__file__), tempdir_name)} --prefix "
-        + data["python_command"]
+        "conda run -p {} ".format(os.path.join(os.path.dirname(__file__).replace("\\\\", "\\"), tempdir_name))
+        + body["python_command"]
     )
-    p = subprocess.Popen(conda_command, shell=True)
-    return p
+    p = subprocess.Popen(conda_command, shell=True, stdout=subprocess.PIPE)
+    os.chdir('..')
+    return p, tempdir_name
 
 
 def test():
@@ -111,6 +120,4 @@ def test():
 
 
 if __name__ == "__main__":
-    worker_main()
-    # test()
-    #print(os.path.join(os.path.dirname(__file__), "tmp2x2ureu2"))
+    main()
