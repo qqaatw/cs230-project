@@ -9,6 +9,7 @@ from functools import partial
 
 from cs230_common.messenger import PikaMessenger
 from cs230_common.file_transfer_client import FileTransferClient
+from cs230_common.utils import *
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
@@ -48,8 +49,9 @@ class Scheduler:
             # If available put task into ongoing_tasks & send message to the available worker
             if available_worker_id:
                 self.ongoing_tasks[task_id] = {"username": username, "python_command": python_command, "worker_id": available_worker_id}
-                start_new_tasks_msg = json.dumps({"task_id": task_id, "username": username, "python_command": python_command, "worker_id": available_worker_id, "action": "start"})
-                self.messenger.produce(start_new_tasks_msg)
+                start_new_tasks_body = json.dumps({"task_id": task_id, "username": username, "python_command": python_command, "worker_id": available_worker_id, "action": "start"})
+                start_new_tasks_msg = MessageBuilder.build(MessageCategory.scheduled_task, body : start_new_tasks_body, status : str = "OK")
+                self.messenger.produce_fanout(start_new_tasks_msg)
 
             # If not put task into waiting_tasks queue
             else:
@@ -67,17 +69,17 @@ class Scheduler:
 # 2. Consume message from API & workers
     def on_message_received(self, channel, method, body):
         message = json.loads(body)
-        
+
         # When API requested new task to scheduler (API message should contain "request")
-        if 'request' in message:
+        if message['CATEGORY'] == MessageCategory.queue_request:
             self.new_task_requested(message)
 
         # When API uploaded file to FTP server (API message should contain "uploaded", "task_id": f"{task_id}")
-        elif 'uploaded' in message:
+        elif message['CATEGORY'] == MessageCategory.queue_file_uploaded:
             self.new_file_uploaded(message)
 
         # When worker sent task status to scheduler (worker message should contain "status")
-        elif 'status' in message:
+        elif message['CATEGORY'] == MessageCategory.task_status:
             self.worker_message_handler(message)
 
 # 2-1. Consume message (new_task_request) from API, Create task_id & Add file to the new_tasks
@@ -88,9 +90,10 @@ class Scheduler:
 
         self.new_tasks[self.task_id] = {"username": username, "python_command": python_command}
 
-        task_id_message = json.dumps({"Task ID created. task_id": self.task_id})
+        task_id_body = json.dumps({"Task ID created. task_id": self.task_id})
+        task_id_message = MessageBuilder.build(MessageCategory.queue_request_response, body : task_id_body, status : str = "OK")
         # Send task_id to API
-        self.messenger.produce(task_id_message, topic=TOPICS[0])
+        self.messenger.produce_fanout(task_id_message)
         LOGGER.info(f"Task ID {self.task_id} created and sent to API.")
 
 # 2-2. Consume message (new_file_uploaded) from API, Check new_file in FTP server & Send file_location to API
@@ -128,8 +131,9 @@ class Scheduler:
                     available_worker_id = self.find_available_worker(self.ongoing_tasks)
                     if available_worker_id is not None:
                         self.ongoing_tasks[next_task_id] = {"username": username, "python_command": python_command, "worker_id": available_worker_id}
-                        start_next_task_msg = json.dumps({"task_id": next_task_id, "username": username, "python_command": python_command, "worker_id": available_worker_id, "action": "start"})
-                        self.messenger.produce(start_next_task_msg, topic=TOPICS[1:3])
+                        start_next_task_body = json.dumps({"task_id": next_task_id, "username": username, "python_command": python_command, "worker_id": available_worker_id, "action": "start"})
+                        start_next_task_msg = MessageBuilder.build(MessageCategory.scheduled_task, body : start_next_tasks_body, status : str = "OK")
+                        self.messenger.produce_fanout(start_next_task_msg)
                     else:
                         LOGGER.error("No available worker ID found for the next task.")
 
