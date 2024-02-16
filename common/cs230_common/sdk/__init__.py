@@ -19,7 +19,7 @@ class SDK:
         ftp_port : int):
         
         self.username = username
-        #self.password = password
+        self.password = password
 
         self.ftp_host = ftp_host
         self.ftp_port = ftp_port
@@ -71,15 +71,39 @@ class SDK:
             raise RuntimeError(f"Error: {obj['status']}")
         
         return obj["body"]
-            
-
-    def heartbeat(self):
-        """Heartbeat 
-        """
-        self.messenger.produce(r'{"CATEGORY" : MessageCategory., "body" : {} }')
-        #self.
     
-    def complete(self, model_path : str, tfevent_path : str):
+    def device(self):
+        import torch
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+            print("Using CUDA")
+        elif torch.mps.is_available():
+            device = torch.device("mps")
+            print("Using MPS")
+        else:
+            device = torch.device("cpu")
+            print("Using CPU")
+
+    def heartbeat(self, task_id : int, timestamp : int):
+        """Heart beat
+
+        Parameters
+        ----------
+        task_id : int
+            Task ID.
+        timestamp : int
+            Timestamp
+        """
+
+        message = MessageBuilder.build(MessageCategory.heartbeat, {
+            "task_id": task_id,
+            "timestamp": time.time()
+            }
+        )
+        self.messenger.produce(message, Channels.sdk_scheduler)
+        
+    
+    def report(self, task_id : int, model_path : str, tfevent_path : str):
         """Upload the trained model and logs to the file server.
 
         Parameters
@@ -88,9 +112,16 @@ class SDK:
 
         tfevent_path : str
         """
-        ...
+        client = FileTransferClient(self.ftp_host, self.ftp_port, self.username, self.password)
+        client.push_file(task_id, [model_path, tfevent_path])
 
-    def request_scheduling(self) -> tuple[int, str]:
+        message = MessageBuilder.build(MessageCategory.report, {
+            "task_id" : task_id
+        })
+
+        self.messenger.produce(message, Channels.worker_scheduler)
+
+    def request_scheduling(self) -> str:
         """Request a task id"""
 
         message = MessageBuilder.build(MessageCategory.queue_request, 
@@ -103,7 +134,7 @@ class SDK:
         
         assert "task_id" in body
 
-        return body["task_id"], body["path"]
+        return body["task_id"]
     
     def upload_task(self, task_id: int, file_list: list[str], python_command: str):
         """Upload user code and notify the scheduler.
@@ -133,5 +164,4 @@ class SDK:
     def get_scheduling_status(self):
         ...
     
-
 

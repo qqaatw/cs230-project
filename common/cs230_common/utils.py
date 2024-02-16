@@ -10,6 +10,7 @@ class MessageCategory(StrEnum):
 
 class Channels(StrEnum):
     sdk_scheduler = auto()
+    worker_scheduler = auto()
 
 class MessageBuilder:
     @staticmethod
