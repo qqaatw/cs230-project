@@ -11,7 +11,6 @@ class MessageCategory(StrEnum):
     scheduled_task = auto()
     task_status = auto()
 
-
 class Channels(StrEnum):
     sdk_scheduler = auto()
     worker_scheduler = auto()
