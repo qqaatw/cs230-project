@@ -19,8 +19,8 @@ TOPICS = ["api_to_scheduler", "scheduler_to_worker_1", "scheduler_to_worker_2", 
 
 class Scheduler:
     def __init__(self):
-        self.new_tasks = {}
-        self.ongoing_tasks = {}
+        self.new_tasks = {} # key: task_id, {username, python_command}
+        self.ongoing_tasks = {} # key: task_id, {username, python_command, worker_id}
         self.waiting_tasks_queue = Queue()
         self.worker_report_queue = Queue()
         self.messenger = PikaMessenger(broker_host=HOST, broker_port=PORT, receive_topics=TOPICS)
@@ -40,20 +40,20 @@ class Scheduler:
 
 # 1. If worker is available put task into ongoing_tasks & if not into waiting_tasks queue
     def new_tasks_scheduler(self):
-        new_tasks = self.new_tasks # task_id, filename
+        new_tasks = self.new_tasks # key: task_id, {username, python_command}
                       
-        for task_id,filename in new_tasks.items():
+        for task_id, username, python_command in new_tasks.items():
             available_worker_id = self.find_available_worker(self.ongoing_tasks)
                 
             # If available put task into ongoing_tasks & send message to the available worker
             if available_worker_id:
-                self.ongoing_tasks[task_id] = {"filename": filename, "worker_id": available_worker_id}
-                start_new_tasks_msg = json.dumps({"task_id": task_id, "worker_id": available_worker_id, "status": "start"})
+                self.ongoing_tasks[task_id] = {"username": username, "python_command": python_command, "worker_id": available_worker_id}
+                start_new_tasks_msg = json.dumps({"task_id": task_id, "username": username, "python_command": python_command, "worker_id": available_worker_id, "action": "start"})
                 self.messenger.produce(start_new_tasks_msg)
 
             # If not put task into waiting_tasks queue
             else:
-                self.waiting_tasks_queue.put((task_id, filename))
+                self.waiting_tasks_queue.put((task_id, username, python_command))
 
         # After scheduler put into ongoing_tasks/waiting_tasks, delete the task from new_tasks
         del self.new_tasks[task_id]
@@ -68,7 +68,7 @@ class Scheduler:
     def on_message_received(self, channel, method, body):
         message = json.loads(body)
         
-        # When API requested new task to scheduler (API message should contain "request", "filename": f"{file_name}")
+        # When API requested new task to scheduler (API message should contain "request")
         if 'request' in message:
             self.new_task_requested(message)
 
@@ -83,13 +83,18 @@ class Scheduler:
 # 2-1. Consume message (new_task_request) from API, Create task_id & Add file to the new_tasks
     def new_task_requested(self, message):
         self.task_id += 1
-        self.new_tasks[self.task_id] = message['filename']
+        username = message("username")
+        python_command = message("python_command")
+
+        self.new_tasks[self.task_id] = {"username": username, "python_command": python_command}
+
         task_id_message = json.dumps({"Task ID created. task_id": self.task_id})
         # Send task_id to API
         self.messenger.produce(task_id_message, topic=TOPICS[0])
-        LOGGER.info(f"Task ID {self.task_id} created for file {message['filename']}. Task ID sent to API.")
+        LOGGER.info(f"Task ID {self.task_id} created and sent to API.")
 
 # 2-2. Consume message (new_file_uploaded) from API, Check new_file in FTP server & Send file_location to API
+    '''
     def new_file_uploaded(self, message):
         task_id = message['task_id']
         FTPServer = FileTransferClient(host="192.168.0.186", port=21, username="kunwp1", password="test")
@@ -100,7 +105,7 @@ class Scheduler:
             file_location_message = json.dumps({"task_id": task_id, "file_location": f"{file_location}"})      # TODO: Find file location in FTP server 
             self.messenger.produce(file_location_message, topic=TOPICS[0])
             LOGGER.info(f"Task ID {task_id}, file {filename} uploaded to {file_location}.")
-
+    '''
 # 2-3. Consume message (task_status) from workers
 # 2-3. If task is completed, Delete from ongoing_tasks & Put waiting task into ongoing_tasks and send start message to worker
     def worker_message_handler(self, message):    
@@ -119,11 +124,11 @@ class Scheduler:
 
                 # If waiting task exists, find available worker & put the task into ongoing_tasks & send message to the available worker
                 if not self.waiting_tasks_queue.empty():
-                    next_task_id, filename = self.waiting_tasks_queue.get()
+                    next_task_id, username, python_command = self.waiting_tasks_queue.get()
                     available_worker_id = self.find_available_worker(self.ongoing_tasks)
                     if available_worker_id is not None:
-                        self.ongoing_tasks[next_task_id] = {"filename": filename, "worker_id": available_worker_id}
-                        start_next_task_msg = json.dumps({"task_id": next_task_id, "worker_id": available_worker_id, "status": "start"})
+                        self.ongoing_tasks[next_task_id] = {"username": username, "python_command": python_command, "worker_id": available_worker_id}
+                        start_next_task_msg = json.dumps({"task_id": next_task_id, "username": username, "python_command": python_command, "worker_id": available_worker_id, "action": "start"})
                         self.messenger.produce(start_next_task_msg, topic=TOPICS[1:3])
                     else:
                         LOGGER.error("No available worker ID found for the next task.")
