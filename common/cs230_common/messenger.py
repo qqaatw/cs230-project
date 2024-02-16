@@ -9,6 +9,8 @@ LOGGER = logging.getLogger(__name__)
 class PikaMessenger():
     """PikaMessager for RabbitMQ communications.
 
+    PikaMesseneger by default subscribes to a fan out exchange which serves as the public channel for every clinet connecting to the broker.
+
     Parameters
     ----------
     broker_host : str
@@ -33,13 +35,22 @@ class PikaMessenger():
         self.thread = None
         self.threads = []
         self.q = queue.Queue()
+
+        # publishing to fanout exchange
+        self.publish_conn_channel.exchange_declare(exchange='public', exchange_type='fanout')
+        
+        # receiving from fanout exchange
+        result = self.channel.queue_declare(queue='', exclusive=True)
+        self.public_queue_name = result.method.queue
+        self.channel.queue_bind(exchange='public', queue=self.public_queue_name)
     
     def __del__(self):
         LOGGER.info("Close connections")
         for thread in self.threads:
             thread.join()
         
-        self.thread.join()
+        if self.thread is not None:
+            self.thread.join()
         self.conn.close()
         self.publish_conn.close()
     
@@ -79,12 +90,20 @@ class PikaMessenger():
             self.channel.basic_consume(
                 queue=topic,
                 on_message_callback=self._on_message)
+        
+        self.channel.basic_consume(
+            queue=self.public_queue_name,
+            on_message_callback=self._on_message
+        )
             
         LOGGER.info("Start consuming")
         self.channel.start_consuming()
     
     def produce(self, message: str, topic: str, exahange: str = ''):
         self.publish_conn_channel.basic_publish(exchange=exahange, routing_key=topic, body=message)
+    
+    def produce_fanout(self, message: str):
+        self.publish_conn_channel.basic_publish(exchange='public', routing_key='', body=message)
     
     def consume(self):
         self.thread = threading.Thread(target=self._consume, daemon=None)
