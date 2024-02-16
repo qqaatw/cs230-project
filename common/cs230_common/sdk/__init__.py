@@ -60,6 +60,7 @@ class SDK:
         return self.messenger.q.get()
     
     def _verify_response(self, response: str, expected_category: MessageCategory):
+        print(response)
         obj = json.loads(response)
         
         assert "CATEGORY" in obj, "CATEGORY field is not in the response"
@@ -101,8 +102,7 @@ class SDK:
             }
         )
         self.messenger.produce(message, Channels.sdk_scheduler)
-        
-    
+
     def report(self, task_id : int, model_path : str, tfevent_path : str):
         """Upload the trained model and logs to the file server.
 
@@ -112,6 +112,7 @@ class SDK:
 
         tfevent_path : str
         """
+
         client = FileTransferClient(self.ftp_host, self.ftp_port, self.username, self.password)
         client.push_file(task_id, [model_path, tfevent_path])
 
@@ -127,10 +128,12 @@ class SDK:
         message = MessageBuilder.build(MessageCategory.queue_request, 
             {
                 "username" : self.username,
+                "python_command" : "python train.py"
             }
         )
-        self.messenger.produce(message, Channels.sdk_scheduler)
-        body = self._verify_response(self.wait_response())
+        self.messenger.produce(message, "api_to_scheduler")
+        queue_name, body = self._wait_response()
+        body = self._verify_response(body, "queue_request_response")
         
         assert "task_id" in body
 
@@ -159,7 +162,7 @@ class SDK:
                 "python_command" : python_command
             }
         )
-        self.messenger.produce(message, Channels.sdk_scheduler)
+        self.messenger.produce(message, Channels.api_to_scheduler)
 
     def get_scheduling_status(self):
         ...

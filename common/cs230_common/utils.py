@@ -1,4 +1,5 @@
 from enum import StrEnum, auto
+import json
 
 class MessageCategory(StrEnum):
     heartbeat = auto()
@@ -11,6 +12,7 @@ class MessageCategory(StrEnum):
 class Channels(StrEnum):
     sdk_scheduler = auto()
     worker_scheduler = auto()
+    api_to_scheduler = auto()
 
 class MessageBuilder:
     @staticmethod
@@ -20,4 +22,4 @@ class MessageBuilder:
             "status" : status,
             "body" : body,
         }
-        return message
+        return json.dumps(message)
