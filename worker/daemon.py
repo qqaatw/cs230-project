@@ -16,6 +16,7 @@ SHELL = False
 if sys.platform.startswith("win"):
     SHELL = True
 
+
 class CondaManager:
     def __init__(self, name: str, path: str):
         self.name = name
@@ -26,7 +27,7 @@ class CondaManager:
         tempdir_name = os.path.basename(tempdir.name)
         if os.path.exists(tempdir_name):
             raise RuntimeError("Directory {tempdir_name} already exists.")
-    
+
         mkdir = f"mkdir {tempdir_name}".split()
         print(mkdir)
         command = f"conda env create --prefix {tempdir_name} -f {self.path}".split(" ")
@@ -41,19 +42,19 @@ Worker thread receives message in a json format from scheduler, parse the json s
 """
 
 
-def worker_main():    
+def worker_main():
     with open("config.json", "r") as f:
         config = json.load(f)
 
     messenger = PikaMessenger(
         broker_host=config["broker"]["broker_host"],
         broker_port=config["broker"]["broker_port"],
-        topics=["worker_to_scheduler"]
+        topics=["worker_to_scheduler"],
     )
 
     # create a thread to receive messages and put them in the queue
     messenger.comsume()
-    
+
     processes = {}
 
     while True:
@@ -62,8 +63,10 @@ def worker_main():
             if exit_code is not None:
                 p.terminate()
                 msg_body = json.dumps({"task_id": tid, "status": exit_code})
-                messenger.produce(MessageBuilder.build(MessageCategory.task_status, msg_body))
-                
+                messenger.produce(
+                    MessageBuilder.build(MessageCategory.task_status, msg_body)
+                )
+
         if messenger.q.empty():
             time.sleep(1)
             continue
@@ -87,12 +90,15 @@ def run_task(msg_body, config):
         host="192.168.0.186", port=21, username="kunwp1", password="test"
     )
     FTPServer.fetch_file(task_id)
-    
+
     conda_manager = CondaManager(config["env"]["name"], config["env"]["path"])
     tempdir_name = conda_manager.build()
-    
+
     os.chdir(task_id)
-    conda_command = f"conda run -n {os.path.join(os.path.dirname(__file__), tempdir_name)} --prefix " + data["python_command"]
+    conda_command = (
+        f"conda run -n {os.path.join(os.path.dirname(__file__), tempdir_name)} --prefix "
+        + data["python_command"]
+    )
     p = subprocess.Popen(conda_command, shell=True)
     return p
 
@@ -103,6 +109,7 @@ def test():
     conda_manager = CondaManager(config["env"]["name"], config["env"]["path"])
     conda_manager.build()
 
+
 if __name__ == "__main__":
-    #test()
+    # test()
     print(os.path.join(os.path.dirname(__file__), "tmp2x2ureu2"))
