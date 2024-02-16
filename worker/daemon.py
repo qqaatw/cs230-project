@@ -111,5 +111,6 @@ def test():
 
 
 if __name__ == "__main__":
+    worker_main()
     # test()
-    print(os.path.join(os.path.dirname(__file__), "tmp2x2ureu2"))
+    #print(os.path.join(os.path.dirname(__file__), "tmp2x2ureu2"))
