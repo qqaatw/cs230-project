@@ -105,8 +105,8 @@ class FileTransferClient:
         os.remove(zip_filename)
         print("File removed successfully:", zip_filename)
 
-    def list_files(self):
-        files = self.ftp.nlst()
+    def list_files(self, path: str):
+        files = self.ftp.nlst(path)
         for file in files:
             print(file)
         return files
