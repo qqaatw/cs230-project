@@ -116,12 +116,9 @@ class Scheduler:
         self.new_tasks[self.task_id] = {"username": username}
 
         task_id_message = MessageBuilder.build(
-            MessageCategory.queue_request_response, 
-            {
-                "username": username,
-                "task_id": self.task_id
-            },
-            "OK"
+            MessageCategory.queue_request_response,
+            {"username": username, "task_id": self.task_id},
+            "OK",
         )
         # Send task_id to API
         self.messenger.produce_fanout(task_id_message)
@@ -203,6 +200,7 @@ def scheduler_main():
     scheduler = Scheduler()
     scheduler.consume_message()
     scheduler.start_new_tasks_scheduler()
+
 
 if __name__ == "__main__":
     scheduler_main()

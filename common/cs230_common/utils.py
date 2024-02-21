@@ -27,12 +27,12 @@ class MessageBuilder:
             "body": body,
         }
         return json.dumps(message)
-    
+
     @staticmethod
     def extract(message: str):
         message = json.loads(message)
-        
+
         if message["status"] != "OK":
             raise RuntimeError(f"Error: {message['status']}")
-        
+
         return message["CATEGORY"], message["body"]

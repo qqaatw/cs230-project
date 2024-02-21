@@ -125,7 +125,9 @@ class SDK:
         client = FileTransferClient(
             self.ftp_host, self.ftp_port, self.username, self.password
         )
-        client.push_file(task_id, [model_path, tfevent_path] if tfevent_path else [model_path])
+        client.push_file(
+            task_id, [model_path, tfevent_path] if tfevent_path else [model_path]
+        )
 
         message = MessageBuilder.build(MessageCategory.report, {"task_id": task_id})
 
@@ -175,8 +177,8 @@ class SDK:
 
     def get_scheduling_status(self):
         ...
-    
-    def launch(self, fn : callable):
+
+    def launch(self, fn: callable):
         """Launch the main program with error handling.
 
         Parameters
