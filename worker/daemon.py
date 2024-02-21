@@ -32,15 +32,19 @@ class CondaManager:
         print(mkdir)
         command = f"conda env create --prefix {tempdir_name} -f {self.path}".split(" ")
         print(command)
-        result = subprocess.run(command, capture_output=True, text=True, shell=SHELL)
-        print(result.stdout, result.stderr)
-        return tempdir_name
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, shell=SHELL, timeout=1) # set timeout to 10 seconds
+            print(result.stdout, result.stderr)
+            return tempdir_name
+        except subprocess.TimeoutExpired:
+            shutil.rmtree(tempdir_name)
+            print("The command timed out")
+            return "cs230" # return pre-create
 
 
 """
 Worker thread receives message in a json format from scheduler, parse the json string, and execute the worker_task
 """
-
 
 def main():
     with open("config.json", "r") as f:
@@ -52,10 +56,8 @@ def main():
         receive_topics=["worker_to_scheduler"],
     )
 
-    # create a thread to receive messages and put them in the queue
-    messenger.consume()
-
-    try:
+    try:    
+        messenger.consume()
         worker_main(config, messenger)
     except KeyboardInterrupt:
         messenger.stop_consuming()
@@ -65,24 +67,14 @@ def main():
 def worker_main(config, messenger):
     process = {}
     while True:
-        for key in process:
-            task_id = key[0]
-            env = key[1]
-            exit_code = process[key].poll()
-            if exit_code is not None:
-                process[key].terminate()
-                shutil.rmtree(env)
-                shutil.rmtree(str(task_id))
-                msg_body = {"task_id": task_id, "status": exit_code}
-                messenger.produce(
-                    MessageBuilder.build(MessageCategory.task_status, msg_body), "worker_to_scheduler"
-                )
+        handle_completed_process(process)
 
         if messenger.q.empty():
             time.sleep(1)
             continue
 
         _, json_string = messenger.q.get()
+        
         data = json.loads(json_string)
         if data["CATEGORY"] == MessageCategory.scheduled_task:
             task_id = data["body"]["task_id"]
@@ -96,7 +88,7 @@ def worker_main(config, messenger):
 def run_task(body, config):
     task_id = body["task_id"]
     FTPServer = FileTransferClient(
-        host="18.223.152.106", port=21, username="kunwp1", password="test"
+        host=config["ftp"]["ftp_host"], port=int(config["ftp"]["ftp_port"]), username="kunwp1", password="test"
     )
     FTPServer.fetch_file(task_id)
     conda_manager = CondaManager(config["env"]["name"], config["env"]["path"])
@@ -110,6 +102,20 @@ def run_task(body, config):
     p = subprocess.Popen(conda_command, shell=True, stdout=subprocess.PIPE)
     os.chdir('..')
     return p, tempdir_name
+
+def handle_completed_process(process):
+    for key in process:
+        task_id = key[0]
+        env = key[1]
+        exit_code = process[key].poll()
+        if exit_code is not None:
+            process[key].terminate()
+            shutil.rmtree(env)
+            shutil.rmtree(str(task_id))
+            msg_body = {"task_id": task_id, "status": exit_code}
+            messenger.produce(
+                MessageBuilder.build(MessageCategory.task_status, msg_body), "worker_to_scheduler"
+            )
 
 
 def test():
