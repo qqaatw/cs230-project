@@ -23,23 +23,24 @@ class CondaManager:
         self.path = path
 
     def build(self):
-        tempdir = tempfile.TemporaryDirectory()
-        tempdir_name = os.path.basename(tempdir.name)
-        if os.path.exists(tempdir_name):
-            raise RuntimeError("Directory {tempdir_name} already exists.")
-
-        mkdir = f"mkdir {tempdir_name}".split()
-        print(mkdir)
-        command = f"conda env create --prefix {tempdir_name} -f {self.path}".split(" ")
+        tempdir = tempfile.TemporaryDirectory("")
+        
+        command = f"conda env create --prefix {tempdir.name} -f {self.path}".split(" ")
         print(command)
+        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=SHELL) # use Popen instead of run
         try:
-            result = subprocess.run(command, capture_output=True, text=True, shell=SHELL, timeout=1) # set timeout to 10 seconds
-            print(result.stdout, result.stderr)
-            return tempdir_name
+            stdoutdata, stderrdata = proc.communicate(timeout=5) # use communicate with timeout
+            print(stdoutdata.decode('utf-8'), stderrdata.decode('utf-8'))
+            return tempdir.name
         except subprocess.TimeoutExpired:
-            shutil.rmtree(tempdir_name)
             print("The command timed out")
-            return "cs230" # return pre-create
+            proc.kill() # kill the subprocess if timeout
+            tempdir.cleanup()
+            return "cs230" # return pre-created
+        except KeyboardInterrupt: # catch keyboard interrupt
+            print("The user interrupted the command")
+            proc.terminate() # terminate the subprocess if interrupt
+            return "cs230" # return empty string if interrupt
 
 
 """
@@ -53,7 +54,7 @@ def main():
     messenger = PikaMessenger(
         broker_host=config["broker"]["broker_host"],
         broker_port=config["broker"]["broker_port"],
-        receive_topics=["worker_to_scheduler"],
+        receive_topics=[]
     )
 
     try:    
@@ -67,7 +68,7 @@ def main():
 def worker_main(config, messenger):
     process = {}
     while True:
-        handle_completed_process(process)
+        handle_completed_process(process, messenger)
 
         if messenger.q.empty():
             time.sleep(1)
@@ -80,43 +81,50 @@ def worker_main(config, messenger):
             task_id = data["body"]["task_id"]
             p, env = run_task(data["body"], config)
             process[(task_id, env)] = p
+        elif data["CATEGORY"] == MessageCategory.queue_request_response:
+            continue
         else:
             raise RuntimeError(
-                f"This is not the message expected from the worker.")
+                f"This is not the message expected from the scheduler.")
 
 
 def run_task(body, config):
     task_id = body["task_id"]
     FTPServer = FileTransferClient(
-        host=config["ftp"]["ftp_host"], port=int(config["ftp"]["ftp_port"]), username="kunwp1", password="test"
+        host=config["broker"]["broker_host"], port=int(config["ftp"]["ftp_port"]), username="kunwp1", password="test"
     )
     FTPServer.fetch_file(task_id)
     conda_manager = CondaManager(config["env"]["name"], config["env"]["path"])
     tempdir_name = conda_manager.build()
-    
     os.chdir(str(task_id))
     conda_command = (
         "conda run -p {} ".format(os.path.join(os.path.dirname(__file__).replace("\\\\", "\\"), tempdir_name))
         + body["python_command"]
     )
-    p = subprocess.Popen(conda_command, shell=True, stdout=subprocess.PIPE)
+    p = subprocess.Popen(conda_command, shell=True)
     os.chdir('..')
     return p, tempdir_name
 
-def handle_completed_process(process):
+def handle_completed_process(process, messenger):
+    to_remove = []
     for key in process:
         task_id = key[0]
         env = key[1]
         exit_code = process[key].poll()
         if exit_code is not None:
             process[key].terminate()
-            shutil.rmtree(env)
+            process[key].stdout
+            if env != "cs230":
+                shutil.rmtree(env)
             shutil.rmtree(str(task_id))
             msg_body = {"task_id": task_id, "status": exit_code}
             messenger.produce(
-                MessageBuilder.build(MessageCategory.task_status, msg_body), "worker_to_scheduler"
+                MessageBuilder.build(MessageCategory.task_status, msg_body), "worker_scheduler"
             )
-
+            to_remove.append(key)
+            
+    for key in to_remove:
+        del process[key]
 
 def test():
     with open("config.json", "r") as f:
