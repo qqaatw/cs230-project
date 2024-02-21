@@ -1,3 +1,4 @@
+import os
 import time
 import json
 import logging
@@ -84,12 +85,16 @@ class SDK:
         if torch.cuda.is_available():
             device = torch.device("cuda")
             print("Using CUDA")
-        elif torch.mps.is_available():
+        elif torch.backends.mps.is_available():
             device = torch.device("mps")
             print("Using MPS")
         else:
             device = torch.device("cpu")
             print("Using CPU")
+        return device
+
+    def get_task_id(self):
+        return os.environ["TASK_ID"]
 
     def heartbeat(self, task_id: int, timestamp: int):
         """Heart beat
@@ -107,7 +112,7 @@ class SDK:
         )
         self.messenger.produce(message, Channels.sdk_scheduler)
 
-    def report(self, task_id: int, model_path: str, tfevent_path: str):
+    def report(self, task_id: int, model_path: str, tfevent_path: str | None):
         """Upload the trained model and logs to the file server.
 
         Parameters
@@ -120,7 +125,7 @@ class SDK:
         client = FileTransferClient(
             self.ftp_host, self.ftp_port, self.username, self.password
         )
-        client.push_file(task_id, [model_path, tfevent_path])
+        client.push_file(task_id, [model_path, tfevent_path] if tfevent_path else [model_path])
 
         message = MessageBuilder.build(MessageCategory.report, {"task_id": task_id})
 
@@ -170,3 +175,17 @@ class SDK:
 
     def get_scheduling_status(self):
         ...
+    
+    def launch(self, fn : callable):
+        """Launch the main program with error handling.
+
+        Parameters
+        ----------
+        fn : callable
+            main function.
+        """
+
+        try:
+            fn(self)
+        except KeyboardInterrupt:
+            self.messenger.stop_consuming()

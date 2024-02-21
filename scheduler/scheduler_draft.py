@@ -3,9 +3,7 @@ import logging
 
 import json
 import os
-from ftplib import FTP
 from queue import Queue
-from functools import partial
 
 from cs230_common.messenger import PikaMessenger
 from cs230_common.file_transfer_client import FileTransferClient
@@ -93,23 +91,22 @@ class Scheduler:
         while True:
             self.new_tasks_scheduler()
             time.sleep(1)
-            # print("Debug 4")
 
     # 2. Consume message from API & workers
     def on_message_received(self, channel, method, body):
-        message = json.loads(body)
+        category, msg_body = MessageBuilder.extract(body)
 
         # When API requested new task to scheduler (API message should contain "request")
-        if message["CATEGORY"] == MessageCategory.queue_request:
-            self.new_task_requested(message["body"])
+        if category == MessageCategory.queue_request:
+            self.new_task_requested(msg_body)
 
         # When API uploaded file to FTP server (API message should contain "uploaded", "task_id": f"{task_id}")
-        elif message["CATEGORY"] == MessageCategory.queue_file_uploaded:
-            self.new_file_uploaded(message["body"])
+        elif category == MessageCategory.queue_file_uploaded:
+            self.new_file_uploaded(msg_body)
 
         # When worker sent task status to scheduler (worker message should contain "status")
-        elif message["CATEGORY"] == MessageCategory.task_status:
-            self.worker_message_handler(message["body"])
+        elif category == MessageCategory.task_status:
+            self.worker_message_handler(msg_body)
 
     # 2-1. Consume message (new_task_request) from API, Create task_id & Add file to the new_tasks
     def new_task_requested(self, message):
@@ -118,9 +115,13 @@ class Scheduler:
 
         self.new_tasks[self.task_id] = {"username": username}
 
-        task_id_body = {"username": username, "task_id": self.task_id}
         task_id_message = MessageBuilder.build(
-            MessageCategory.queue_request_response, task_id_body, "OK"
+            MessageCategory.queue_request_response, 
+            {
+                "username": username,
+                "task_id": self.task_id
+            },
+            "OK"
         )
         # Send task_id to API
         self.messenger.produce_fanout(task_id_message)
@@ -202,7 +203,6 @@ def scheduler_main():
     scheduler = Scheduler()
     scheduler.consume_message()
     scheduler.start_new_tasks_scheduler()
-
 
 if __name__ == "__main__":
     scheduler_main()
