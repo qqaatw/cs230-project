@@ -8,16 +8,18 @@ from ..file_transfer_client import FileTransferClient
 
 LOGGER = logging.getLogger(__name__)
 
+
 class SDK:
-    def __init__(self,
-        username : str,
-        password : str,
-        broker_host : str,
-        broker_port : int,
-        receive_topics : list[str],
-        ftp_host : str,
-        ftp_port : int):
-        
+    def __init__(
+        self,
+        username: str,
+        password: str,
+        broker_host: str,
+        broker_port: int,
+        receive_topics: list[str],
+        ftp_host: str,
+        ftp_port: int,
+    ):
         self.username = username
         self.password = password
 
@@ -30,9 +32,10 @@ class SDK:
             receive_topics=receive_topics,
         )
         self.messenger.consume()
+
     def __del__(self):
         self.messenger.stop_consuming()
-    
+
     def __login(self, username: str, password: str) -> bool:
         """(Unused for now) Login to the system.
 
@@ -50,31 +53,34 @@ class SDK:
         """
         # ftp =  FTP()
         ...
-    
-    def _wait_response(self, timeout : float = 5.0):
+
+    def _wait_response(self, timeout: float = 5.0):
         start = time.time()
         while self.messenger.q.empty() and (time.time() - start) < timeout:
             pass
         if self.messenger.q.empty():
             raise TimeoutError("The reponse time out.")
         return self.messenger.q.get()
-    
+
     def _verify_response(self, response: str, expected_category: MessageCategory):
         print(response)
         obj = json.loads(response)
-        
+
         assert "CATEGORY" in obj, "CATEGORY field is not in the response"
 
         if obj["CATEGORY"] != expected_category:
-            raise RuntimeError(f"The expected category is {expected_category}, but the received one is {obj['CATEGORY']}")
-        
+            raise RuntimeError(
+                f"The expected category is {expected_category}, but the received one is {obj['CATEGORY']}"
+            )
+
         if obj["status"] != "OK":
             raise RuntimeError(f"Error: {obj['status']}")
-        
+
         return obj["body"]
-    
+
     def device(self):
         import torch
+
         if torch.cuda.is_available():
             device = torch.device("cuda")
             print("Using CUDA")
@@ -85,7 +91,7 @@ class SDK:
             device = torch.device("cpu")
             print("Using CPU")
 
-    def heartbeat(self, task_id : int, timestamp : int):
+    def heartbeat(self, task_id: int, timestamp: int):
         """Heart beat
 
         Parameters
@@ -96,14 +102,12 @@ class SDK:
             Timestamp
         """
 
-        message = MessageBuilder.build(MessageCategory.heartbeat, {
-            "task_id": task_id,
-            "timestamp": time.time()
-            }
+        message = MessageBuilder.build(
+            MessageCategory.heartbeat, {"task_id": task_id, "timestamp": time.time()}
         )
         self.messenger.produce(message, Channels.sdk_scheduler)
 
-    def report(self, task_id : int, model_path : str, tfevent_path : str):
+    def report(self, task_id: int, model_path: str, tfevent_path: str):
         """Upload the trained model and logs to the file server.
 
         Parameters
@@ -113,32 +117,29 @@ class SDK:
         tfevent_path : str
         """
 
-        client = FileTransferClient(self.ftp_host, self.ftp_port, self.username, self.password)
+        client = FileTransferClient(
+            self.ftp_host, self.ftp_port, self.username, self.password
+        )
         client.push_file(task_id, [model_path, tfevent_path])
 
-        message = MessageBuilder.build(MessageCategory.report, {
-            "task_id" : task_id
-        })
+        message = MessageBuilder.build(MessageCategory.report, {"task_id": task_id})
 
         self.messenger.produce(message, Channels.worker_scheduler)
 
     def request_scheduling(self) -> str:
         """Request a task id"""
 
-        message = MessageBuilder.build(MessageCategory.queue_request, 
-            {
-                "username" : self.username,
-                "python_command" : "python train.py"
-            }
+        message = MessageBuilder.build(
+            MessageCategory.queue_request, {"username": self.username}
         )
         self.messenger.produce(message, "api_to_scheduler")
         queue_name, body = self._wait_response()
         body = self._verify_response(body, "queue_request_response")
-        
+
         assert "task_id" in body
 
         return body["task_id"]
-    
+
     def upload_task(self, task_id: int, file_list: list[str], python_command: str):
         """Upload user code and notify the scheduler.
 
@@ -152,19 +153,20 @@ class SDK:
             The entry point.
         """
 
-        client = FileTransferClient(self.ftp_host, self.ftp_port, self.username, self.password)
+        client = FileTransferClient(
+            self.ftp_host, self.ftp_port, self.username, self.password
+        )
         client.push_file(task_id, file_list)
 
-        message = MessageBuilder.build(MessageCategory.queue_file_uploaded, 
+        message = MessageBuilder.build(
+            MessageCategory.queue_file_uploaded,
             {
-                "username" : self.username,
-                "task_id" : task_id,
-                "python_command" : python_command
-            }
+                "username": self.username,
+                "task_id": task_id,
+                "python_command": python_command,
+            },
         )
         self.messenger.produce(message, Channels.api_to_scheduler)
 
     def get_scheduling_status(self):
         ...
-    
-
