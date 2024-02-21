@@ -8,6 +8,7 @@ class MessageCategory(StrEnum):
     queue_file_uploaded = auto()
     report = auto()
     scheduled_task = auto()
+    task_status = auto()
 
 class Channels(StrEnum):
     sdk_scheduler = auto()
