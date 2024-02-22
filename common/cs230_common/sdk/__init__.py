@@ -125,9 +125,8 @@ class SDK:
         client = FileTransferClient(
             self.ftp_host, self.ftp_port, self.username, self.password
         )
-        client.push_file(
-            task_id, [model_path, tfevent_path] if tfevent_path else [model_path]
-        )
+
+        client.upload_results(task_id, [model_path, tfevent_path] if tfevent_path else [model_path])
 
         message = MessageBuilder.build(MessageCategory.report, {"task_id": task_id})
 
