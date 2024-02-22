@@ -35,7 +35,6 @@ class FileTransferClient:
 
         try:
             # retrieve the remote file and write it to the local file
-            print(ftp_zipfile_path)
             self.ftp.retrbinary(f"RETR {ftp_zipfile_path}", local_file.write)
         except ftplib.error_perm as e:
             print("Error:", e)

@@ -99,8 +99,9 @@ def run_task(body, config):
     os.chdir(str(task_id))
     conda_command = (
         "conda run -p {} ".format(os.path.join(os.path.dirname(__file__).replace("\\\\", "\\"), tempdir_name))
-        + body["python_command"]
+        + "TASK_ID=" + str(task_id) + " " + body["python_command"]
     )
+    print(conda_command)
     p = subprocess.Popen(conda_command, shell=True, stdout=open(str(task_id) + "stdout.txt", "w"), stderr=open(str(task_id) + "stderr.txt", "w"))
     os.chdir('..')
     return p, tempdir_name
