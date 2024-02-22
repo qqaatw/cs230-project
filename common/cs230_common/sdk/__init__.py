@@ -187,6 +187,7 @@ class SDK:
         """
 
         try:
-            fn(self)
-        except KeyboardInterrupt:
+            fn(self) 
+        finally:
             self.messenger.stop_consuming()
+
