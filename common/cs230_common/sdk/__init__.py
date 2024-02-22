@@ -187,7 +187,9 @@ class SDK:
         """
 
         try:
-            fn(self) 
-        finally:
-            self.messenger.stop_consuming()
-
+            try:
+                fn(self) 
+            finally:
+                self.messenger.stop_consuming()
+        except:
+            ...
