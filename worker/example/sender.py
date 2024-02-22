@@ -3,7 +3,7 @@
 import pika
 
 connection = pika.BlockingConnection(
-    pika.ConnectionParameters('3.135.226.176', 5673))
+    pika.ConnectionParameters('18.223.152.106', 5673))
 channel = connection.channel()
 
 channel.queue_declare(queue='node_1_scheduling')

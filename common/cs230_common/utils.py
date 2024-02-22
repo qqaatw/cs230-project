@@ -2,6 +2,7 @@ from enum import StrEnum, auto
 import json
 
 
+
 class MessageCategory(StrEnum):
     heartbeat = auto()
     queue_request = auto()
@@ -10,7 +11,6 @@ class MessageCategory(StrEnum):
     report = auto()
     scheduled_task = auto()
     task_status = auto()
-
 
 class Channels(StrEnum):
     sdk_scheduler = auto()
@@ -26,6 +26,7 @@ class MessageBuilder:
             "status": status,
             "body": body,
         }
+
         return json.dumps(message)
 
     @staticmethod

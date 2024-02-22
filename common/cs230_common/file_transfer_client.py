@@ -2,6 +2,7 @@ import os
 import ftplib
 import socket
 import zipfile
+import sys
 
 
 class FileTransferClient:
@@ -31,6 +32,8 @@ class FileTransferClient:
     def fetch_file(self, task_id: int):
         zip_filename = str(task_id) + ".zip"
         ftp_zipfile_path = os.path.join(str(task_id), zip_filename)
+        if sys.platform.startswith("win"):
+            ftp_zipfile_path = str(task_id) + "/" + zip_filename
         local_file = open(zip_filename, "wb")
 
         try:
@@ -89,7 +92,9 @@ class FileTransferClient:
 
         remote_file = open(zip_filename, "rb")
         ftp_zipfile_path = os.path.join(str(task_id), zip_filename)
-
+        if sys.platform.startswith("win"):
+            ftp_zipfile_path = str(task_id) + "/" + zip_filename
+            
         try:
             # send the zip file to the FTP server
             self.ftp.mkd(str(task_id))
@@ -110,3 +115,24 @@ class FileTransferClient:
         for file in files:
             print(file)
         return files
+
+    def upload_results(self, task_id: int, filenames: list):
+        results_path = os.path.join(str(task_id), "results")
+        if sys.platform.startswith("win"):
+            results_path = str(task_id) + "/" + "results"
+        
+        if results_path not in self.ftp.nlst(str(task_id)):
+            self.ftp.mkd(results_path)
+
+        for filename in filenames:
+            final_path = os.path.join(results_path, filename)
+            if sys.platform.startswith("win"):
+                final_path = results_path + "/" + filename
+            try:
+                file = open(filename, "rb")
+                self.ftp.storbinary(f"STOR {final_path}", file)
+            except Exception as e:
+                print(f"An error occurred while uploading {filename}: {e}")
+            finally:
+                file.close()
+        
