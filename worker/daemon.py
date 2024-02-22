@@ -101,8 +101,7 @@ def run_task(body, config):
         "set TASK_ID=" + str(task_id) + "& " + "conda run -p {} ".format(os.path.join(os.path.dirname(__file__).replace("\\\\", "\\"), tempdir_name))
         + body["python_command"]
     )
-    print(conda_command)
-    p = subprocess.Popen(conda_command, shell=True, stdout=open(str(task_id) + "stdout.txt", "w"), stderr=open(str(task_id) + "stderr.txt", "w"))
+    p = subprocess.Popen(conda_command, shell=True, stdout=open("stdout.txt", "w"), stderr=open("stderr.txt", "w"))
     os.chdir('..')
     return p, tempdir_name
 
@@ -116,7 +115,13 @@ def handle_completed_process(process, messenger, config):
             process[key].terminate()
             if env != "cs230":
                 shutil.rmtree(env)
-            #shutil.rmtree(str(task_id))
+            os.chdir(str(task_id))
+            FTPServer = FileTransferClient(
+                host=config["broker"]["broker_host"], port=int(config["ftp"]["ftp_port"]), username="kunwp1", password="test"
+            )
+            FTPServer.upload_results(task_id, ["stdout.txt", "stderr.txt"])
+            os.chdir('..')
+            shutil.rmtree(str(task_id))
             msg_body = {"task_id": task_id, "status": exit_code}
             messenger.produce(
                 MessageBuilder.build(MessageCategory.task_status, msg_body), "worker_scheduler"
