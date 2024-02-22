@@ -121,7 +121,7 @@ class FileTransferClient:
         if sys.platform.startswith("win"):
             results_path = str(task_id) + "/" + "results"
         
-        if "results" not in self.ftp.nlst(str(task_id)):
+        if results_path not in self.ftp.nlst(str(task_id)):
             self.ftp.mkd(results_path)
 
         for filename in filenames:

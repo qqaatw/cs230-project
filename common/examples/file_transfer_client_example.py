@@ -11,7 +11,7 @@ def main():
     FTPServer.fetch_file(1)
     FTPServer.list_files("1")
     FTPServer.upload_results(1, ["messenger_example.py"])
-
+    FTPServer.upload_results(1, ["file_transfer_client_example.py"])
 
 if __name__ == "__main__":
     main()
