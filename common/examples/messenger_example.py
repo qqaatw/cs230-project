@@ -9,26 +9,24 @@ HOST = "18.223.152.106"
 PORT = "5673"
 TOPICs = ["node_1_scheduling"]
 
+
 def main():
-    messenger = PikaMessenger(
-        broker_host=HOST,
-        broker_port=PORT,
-        receive_topics=TOPICs
-    )
-    
+    messenger = PikaMessenger(broker_host=HOST, broker_port=PORT, receive_topics=TOPICs)
+
     # async consume
     messenger.consume()
 
     count = 0
     try:
         while True:
-            count+=1
+            count += 1
             messenger.produce(f"{count} message sent.", topic="file")
             time.sleep(5)
     except KeyboardInterrupt:
         messenger.stop_consuming()
     finally:
         del messenger
+
 
 if __name__ == "__main__":
     main()

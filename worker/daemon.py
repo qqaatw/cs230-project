@@ -21,11 +21,10 @@ class CondaManager:
         self.name = name
         self.path = path
 
-
     def build(self):
-        if os.path.exists('env'):
+        if os.path.exists("env"):
             raise RuntimeError("Directory `env` already exists.")
-    
+
         mkdir = f"mkdir env".split()
         print(mkdir)
         result = subprocess.run(mkdir, capture_output=True, text=True, shell=SHELL)
