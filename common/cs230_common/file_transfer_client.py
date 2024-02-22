@@ -94,6 +94,7 @@ class FileTransferClient:
         try:
             # send the zip file to the FTP server
             self.ftp.mkd(str(task_id))
+            self.ftp.mkd(os.path.join(str(task_id), "results"))
             self.ftp.storbinary(f"STOR {ftp_zipfile_path}", remote_file)
         except ftplib.error_perm as e:
             print("Error:", e)
@@ -111,3 +112,16 @@ class FileTransferClient:
         for file in files:
             print(file)
         return files
+
+    def upload_results(self, task_id: int, filenames: list):
+        results_path = os.path.join(str(task_id), "results")
+        for filename in filenames:
+            final_path = os.path.join(results_path, filename)
+            try:
+                file = open(filename, "rb")
+                self.ftp.storbinary(f"STOR {final_path}", file)
+            except Exception as e:
+                print(f"An error occurred while uploading {filename}: {e}")
+            finally:
+                file.close()
+        

@@ -68,7 +68,7 @@ def main():
 def worker_main(config, messenger):
     process = {}
     while True:
-        handle_completed_process(process, messenger)
+        handle_completed_process(process, messenger, config)
 
         if messenger.q.empty():
             time.sleep(1)
@@ -101,11 +101,11 @@ def run_task(body, config):
         "conda run -p {} ".format(os.path.join(os.path.dirname(__file__).replace("\\\\", "\\"), tempdir_name))
         + body["python_command"]
     )
-    p = subprocess.Popen(conda_command, shell=True)
+    p = subprocess.Popen(conda_command, shell=True, stdout=open(str(task_id) + "stdout.txt", "w"), stderr=open(str(task_id) + "stderr.txt", "w"))
     os.chdir('..')
     return p, tempdir_name
 
-def handle_completed_process(process, messenger):
+def handle_completed_process(process, messenger, config):
     to_remove = []
     for key in process:
         task_id = key[0]
@@ -113,10 +113,9 @@ def handle_completed_process(process, messenger):
         exit_code = process[key].poll()
         if exit_code is not None:
             process[key].terminate()
-            process[key].stdout
             if env != "cs230":
                 shutil.rmtree(env)
-            shutil.rmtree(str(task_id))
+            #shutil.rmtree(str(task_id))
             msg_body = {"task_id": task_id, "status": exit_code}
             messenger.produce(
                 MessageBuilder.build(MessageCategory.task_status, msg_body), "worker_scheduler"
