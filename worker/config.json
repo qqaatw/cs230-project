@@ -13,5 +13,16 @@
     "ftp" : {
         "ftp_host": "169.234.56.23",
         "ftp_port": "21"
+    },
+    "workers": {
+        "1": {
+            "GPU": true
+        },
+        "2": {
+            "GPU": false
+        },
+        "3": {
+            "GPU": false
+        }
     }
 }
