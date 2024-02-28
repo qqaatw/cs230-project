@@ -78,6 +78,8 @@ def worker_main(config, messenger):
         
         data = json.loads(json_string)
         if data["CATEGORY"] == MessageCategory.scheduled_task:
+            if data["body"]["worker_id"] != int(sys.argv[1]):
+                continue
             task_id = data["body"]["task_id"]
             p, env = run_task(data["body"], config)
             process[(task_id, env)] = p
@@ -139,4 +141,6 @@ def test():
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 1:
+        raise Exception("Worker ID should be defined")
     main()
