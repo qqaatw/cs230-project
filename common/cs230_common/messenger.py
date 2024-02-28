@@ -110,6 +110,7 @@ class PikaMessenger:
 
         LOGGER.info("Start consuming")
         self.channel.start_consuming()
+        self.publish_conn_channel.start_consuming()
 
     def produce(self, message: str, topic: str, exahange: str = ""):
         self.publish_conn_channel.basic_publish(
