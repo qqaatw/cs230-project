@@ -3,9 +3,11 @@ import time
 import gpustat
 import json
 import sys
-import torch
 from cs230_common.messenger import PikaMessenger
 from cs230_common.utils import MessageCategory, MessageBuilder
+
+if len(sys.argv) == 1:
+    raise Exception("Worker ID should be defined")
 
 def profiler_main(config, messenger):
     while True:
@@ -22,7 +24,7 @@ def profiler_main(config, messenger):
         else:
             gpu_usage = memory_used
         
-        msg_body = {"cpu_usage": cpu_percent, "memory_total": memory_total, "memory_used": memory_used,
+        msg_body = {"worker_id": int(sys.argv[1]), "cpu_usage": cpu_percent, "memory_total": memory_total, "memory_used": memory_used,
                     "gpu_usage": gpu_usage}
         
         print(msg_body)
@@ -30,8 +32,8 @@ def profiler_main(config, messenger):
             MessageBuilder.build(MessageCategory.profile, msg_body), "worker_scheduler"
         )
         time.sleep(config["profiler_report_period"])
-
-
+        
+        
 
 with open("../worker/config.json", "r") as f:
     config = json.load(f)
