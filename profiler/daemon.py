@@ -17,11 +17,11 @@ def profiler_main(config, messenger):
         memory_used = memory_usage.total - memory_usage.available
         gpu_usage = 0
 
-        if sys.platform.startswith("win"):
+        if sys.platform.startswith("win") and config["workers"][sys.argv[1]]["GPU"] != 0:
             gpu_stats = gpustat.GPUStatCollection.new_query()
             for gpu in gpu_stats.gpus:
                 gpu_usage = gpu.memory_used * 1024 * 1024
-        else:
+        elif not sys.platform.startswith("win"):
             gpu_usage = memory_used
         
         msg_body = {"worker_id": int(sys.argv[1]), "cpu_usage": cpu_percent, "memory_total": memory_total, "memory_used": memory_used,
