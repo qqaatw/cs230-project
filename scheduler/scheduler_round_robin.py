@@ -88,8 +88,6 @@ class Scheduler:
         for deleted_ in deleted:
             del new_tasks[deleted_]
 
-        print("Debug 3")
-
     # 1-1. Execute new_tasks_scheduler periodically
     def start_new_tasks_scheduler(self):
         while True:
@@ -139,8 +137,8 @@ class Scheduler:
 
         for task_id, task in self.new_tasks.items():
             # Send file location to worker server
-            files = client.list_files(os.path.join("/", task["username"], str(task_id)))
-
+            files = client.list_files("/" + task["username"] + "/" + str(task_id))
+        
             if len(files):
                 LOGGER.info(
                     f"Task ID {task_id} with Python command {python_command} was uploaded successfully."
