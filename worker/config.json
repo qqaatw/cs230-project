@@ -16,13 +16,14 @@
     },
     "workers": {
         "1": {
-            "GPU": true
+            "GPU": 8589934592
         },
         "2": {
-            "GPU": false
+            "GPU": 2147483648
         },
         "3": {
-            "GPU": false
+            "GPU": 0
         }
-    }
+    },
+    "profiler_report_period": 2
 }
