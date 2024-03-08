@@ -4,6 +4,7 @@ import logging
 import json
 import os
 from queue import Queue
+import sys
 
 from cs230_common.messenger import PikaMessenger
 from cs230_common.file_transfer_client import FileTransferClient
@@ -15,7 +16,8 @@ LOGGER = logging.getLogger(__name__)
 HOST = "18.119.97.104"
 PORT = "5673"
 TOPICS = ["api_to_scheduler", "worker_scheduler"]
-
+SCHEDULING_ALGORITHMS = ["next-available", "round-robin", "priority-based"]
+NUMBER_WORKERS = 3;
 
 class Scheduler:
     def __init__(self):
@@ -34,24 +36,34 @@ class Scheduler:
 
     def consume_message(self):
         self.messenger.consume()
-
-    '''
-    # Find available worker
-    def find_available_worker(self, ongoing_tasks):
-        for worker_id in range(1, 4):
+        
+    def next_available(self, ongoing_tasks):
+        for worker_id in range(1, NUMBER_WORKERS + 1):
             if worker_id not in [
                 task["worker_id"] for task in self.ongoing_tasks.values()
             ]:
                 return worker_id
         return None
-    '''
-
-    # Find available worker in round-robin way
-    def find_next_worker(self):
-        available_worker_count = 3  # TODO : last_assigned_worker_id
+    
+    def round_robin(self):
+        available_worker_count = NUMBER_WORKERS
         next_worker_id = (self.last_assigned_worker_id % available_worker_count) + 1
         self.last_assigned_worker_id = next_worker_id
         return next_worker_id
+    
+    def priority_based(self):
+        raise Exception("TODO") 
+
+    # Find available worker
+    def next_worker(self, ongoing_tasks):
+        if sys.argv[1] == SCHEDULING_ALGORITHMS[0]:
+            return self.next_available(ongoing_tasks)
+        elif sys.argv[1] == SCHEDULING_ALGORITHMS[1]:
+            return self.round_robin()
+        elif sys.argv[1] == SCHEDULING_ALGORITHMS[2]:
+            return self.priority_based()
+        else:
+            raise Exception("Unreachable")
 
     # 1. If worker is available put task into ongoing_tasks & if not into waiting_tasks queue
     def new_tasks_scheduler(self):
@@ -62,15 +74,16 @@ class Scheduler:
             if "python_command" not in new_tasks[task_id]:
                 continue
             python_command = new_tasks[task_id]["python_command"]
-            next_worker_id = self.find_next_worker()
+            next_worker_id = self.next_worker(self.ongoing_tasks)
 
             # If available put task into ongoing_tasks & send message to the available worker
-            self.ongoing_tasks[task_id] = {
+            if next_worker_id:
+                self.ongoing_tasks[task_id] = {
                     "username": username,
                     "python_command": python_command,
                     "worker_id": next_worker_id,
                 }
-            start_new_tasks_msg = MessageBuilder.build(
+                start_new_tasks_msg = MessageBuilder.build(
                     MessageCategory.scheduled_task,
                     {
                         "task_id": task_id,
@@ -81,9 +94,12 @@ class Scheduler:
                     },
                     "OK",
                 )
-            self.messenger.produce_fanout(start_new_tasks_msg)
-            print("Debug 1")
-            deleted.append(task_id)
+                self.messenger.produce_fanout(start_new_tasks_msg)
+                deleted.append(task_id)
+
+            # If not put task into waiting_tasks queue
+            else:
+                self.waiting_tasks_queue.put((task_id, username, python_command))
 
         for deleted_ in deleted:
             del new_tasks[deleted_]
@@ -138,7 +154,7 @@ class Scheduler:
         for task_id, task in self.new_tasks.items():
             # Send file location to worker server
             files = client.list_files("/" + task["username"] + "/" + str(task_id))
-        
+
             if len(files):
                 LOGGER.info(
                     f"Task ID {task_id} with Python command {python_command} was uploaded successfully."
@@ -162,7 +178,7 @@ class Scheduler:
                 LOGGER.info(
                     f"Task ID {task_id} completed and removed from ongoing_tasks."
                 )
-                '''
+
                 # If waiting task exists, find available worker & put the task into ongoing_tasks & send message to the available worker
                 if not self.waiting_tasks_queue.empty():
                     LOGGER.info("Scheduling new task.")
@@ -171,32 +187,30 @@ class Scheduler:
                         username,
                         python_command,
                     ) = self.waiting_tasks_queue.get()
-                    available_worker_id = self.find_available_worker(self.ongoing_tasks)
+                    available_worker_id = self.next_worker(self.ongoing_tasks)
                     if available_worker_id is not None:
                         self.ongoing_tasks[next_task_id] = {
                             "username": username,
                             "python_command": python_command,
                             "worker_id": available_worker_id,
                         }
-                        start_next_task_body = json.dumps(
-                            {
-                                "task_id": next_task_id,
-                                "username": username,
-                                "python_command": python_command,
-                                "worker_id": available_worker_id,
-                                "action": "start",
-                            }
-                        )
+                        start_next_task_body = {
+                            "task_id": next_task_id,
+                            "username": username,
+                            "python_command": python_command,
+                            "worker_id": available_worker_id,
+                            "action": "start",
+                        }
                         start_next_task_msg = MessageBuilder.build(
                             MessageCategory.scheduled_task, start_next_task_body, "OK"
                         )
                         self.messenger.produce_fanout(start_next_task_msg)
                     else:
                         LOGGER.error("No available worker ID found for the next task.")
-                '''
+
         elif status == 1:
             LOGGER.error("An error occurred.")
-        
+
 
 def scheduler_main():
     scheduler = Scheduler()
@@ -205,4 +219,8 @@ def scheduler_main():
 
 
 if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        raise Exception("Scheduling algorithm should be specified as an argument: {}".format(SCHEDULING_ALGORITHMS))
+    if sys.argv[1] not in SCHEDULING_ALGORITHMS:
+        raise Exception("Scheduling algorithm should be one of the following arguments: {}".format(SCHEDULING_ALGORITHMS))
     scheduler_main()

@@ -26,7 +26,6 @@ class CondaManager:
         tempdir = tempfile.TemporaryDirectory("")
         
         command = f"conda env create --prefix {tempdir.name} -f {self.path}".split(" ")
-        print(command)
         proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=SHELL) # use Popen instead of run
         try:
             stdoutdata, stderrdata = proc.communicate(timeout=5) # use communicate with timeout
