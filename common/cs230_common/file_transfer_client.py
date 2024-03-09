@@ -116,6 +116,34 @@ class FileTransferClient:
             print(file)
         return files
 
+    def erase_files(self, path: str = "/kunwp1"):
+        def is_directory(ftp, name):
+            try:
+                ftp.cwd(name)
+                ftp.cwd('..')  # Move back to the parent directory
+                return True
+            except:
+                return False
+
+        def remove_directory_recursive(ftp, directory):
+            # List the directory contents
+            files = ftp.nlst(directory)
+
+            # Remove files and subdirectories
+            for item in files:
+                print(f"Deleting {item}")
+                if is_directory(ftp, item):  # If item is a directory, recurse
+                    remove_directory_recursive(ftp, item)
+                else:
+                    ftp.delete(item)  # Remove file
+
+            # Remove the target directory
+            if is_directory(ftp, directory):
+                ftp.rmd(directory)
+        
+        for dir in self.list_files(path):
+            remove_directory_recursive(self.ftp, dir)
+
     def upload_results(self, task_id: int, filenames: list):
         results_path = os.path.join(str(task_id), "results")
         if sys.platform.startswith("win"):
