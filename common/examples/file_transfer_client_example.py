@@ -14,5 +14,6 @@ def main():
     FTPServer.upload_results(1, ["file_transfer_client_example.py"])
     FTPServer.erase_files()
 
+
 if __name__ == "__main__":
     main()

@@ -3,6 +3,9 @@ import ftplib
 import socket
 import zipfile
 import sys
+import logging
+
+LOGGER = logging.getLogger(__name__)
 
 
 class FileTransferClient:
@@ -14,15 +17,15 @@ class FileTransferClient:
             self.ftp.login(username, password)
             self.ftp.cwd(username)
         except (socket.error, ftplib.error_perm) as e:
-            print("Error:", e)
+            LOGGER.debug("Error:", e)
             self.ftp.close()
             raise e
         finally:
-            print("Constructor called, FTP connection established.")
+            LOGGER.debug("Constructor called, FTP connection established.")
 
     def __del__(self):
         self.ftp.quit()
-        print("Destructor called, FTP connection closed.")
+        LOGGER.debug("Destructor called, FTP connection closed.")
 
     """
     1. Fetch the zip file [task_id]/[task_id].zip from the FTP server
@@ -40,13 +43,13 @@ class FileTransferClient:
             # retrieve the remote file and write it to the local file
             self.ftp.retrbinary(f"RETR {ftp_zipfile_path}", local_file.write)
         except ftplib.error_perm as e:
-            print("Error:", e)
+            LOGGER.debug("Error:", e)
             local_file.close()
             os.remove(zip_filename)
             raise e
         finally:
             local_file.close()
-            print("File fetched successfully:", ftp_zipfile_path)
+            LOGGER.debug("File fetched successfully:", ftp_zipfile_path)
 
         folder_name = str(task_id)
         os.mkdir(folder_name)  # Assume the folder doesn't exist
@@ -56,11 +59,11 @@ class FileTransferClient:
             with zipfile.ZipFile(zip_filename, "r") as zip_file:
                 zip_file.extractall(folder_name)
         except zipfile.BadZipFile as e:
-            print("Error:", e)
+            LOGGER.debug("Error:", e)
             os.rmdir(folder_name)
             raise e
         finally:
-            print("File unzipped successfully:", zip_filename)
+            LOGGER.debug("File unzipped successfully:", zip_filename)
 
         os.remove(zip_filename)
 
@@ -82,45 +85,45 @@ class FileTransferClient:
             for file in file_list:
                 zip_file.write(file)
         except (OSError, zipfile.BadZipFile) as e:
-            print("Error:", e)
+            LOGGER.debug("Error:", e)
             zip_file.close()
             os.remove(zip_filename)
             raise e
         finally:
             zip_file.close()
-            print("File zipped successfully:", zip_filename)
+            LOGGER.debug("File zipped successfully:", zip_filename)
 
         remote_file = open(zip_filename, "rb")
         ftp_zipfile_path = os.path.join(str(task_id), zip_filename)
         if sys.platform.startswith("win"):
             ftp_zipfile_path = str(task_id) + "/" + zip_filename
-            
+
         try:
             # send the zip file to the FTP server
             self.ftp.mkd(str(task_id))
             self.ftp.storbinary(f"STOR {ftp_zipfile_path}", remote_file)
         except ftplib.error_perm as e:
-            print("Error:", e)
+            LOGGER.debug("Error:", e)
             remote_file.close()
             raise e
         finally:
             remote_file.close()
-            print("File pushed successfully:", ftp_zipfile_path)
+            LOGGER.debug("File pushed successfully:", ftp_zipfile_path)
 
         os.remove(zip_filename)
-        print("File removed successfully:", zip_filename)
+        LOGGER.debug("File removed successfully:", zip_filename)
 
     def list_files(self, path: str):
         files = self.ftp.nlst(path)
         for file in files:
-            print(file)
+            LOGGER.debug(file)
         return files
 
     def erase_files(self, path: str = "/kunwp1"):
         def is_directory(ftp, name):
             try:
                 ftp.cwd(name)
-                ftp.cwd('..')  # Move back to the parent directory
+                ftp.cwd("..")  # Move back to the parent directory
                 return True
             except:
                 return False
@@ -131,7 +134,7 @@ class FileTransferClient:
 
             # Remove files and subdirectories
             for item in files:
-                print(f"Deleting {item}")
+                LOGGER.debug(f"Deleting {item}")
                 if is_directory(ftp, item):  # If item is a directory, recurse
                     remove_directory_recursive(ftp, item)
                 else:
@@ -140,7 +143,7 @@ class FileTransferClient:
             # Remove the target directory
             if is_directory(ftp, directory):
                 ftp.rmd(directory)
-        
+
         for dir in self.list_files(path):
             remove_directory_recursive(self.ftp, dir)
 
@@ -148,7 +151,7 @@ class FileTransferClient:
         results_path = os.path.join(str(task_id), "results")
         if sys.platform.startswith("win"):
             results_path = str(task_id) + "/" + "results"
-        
+
         if results_path not in self.ftp.nlst(str(task_id)):
             self.ftp.mkd(results_path)
 
@@ -160,7 +163,6 @@ class FileTransferClient:
                 file = open(filename, "rb")
                 self.ftp.storbinary(f"STOR {final_path}", file)
             except Exception as e:
-                print(f"An error occurred while uploading {filename}: {e}")
+                LOGGER.debug(f"An error occurred while uploading {filename}: {e}")
             finally:
                 file.close()
-        

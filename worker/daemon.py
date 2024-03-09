@@ -24,28 +24,33 @@ class CondaManager:
 
     def build(self):
         tempdir = tempfile.TemporaryDirectory("")
-        
+
         command = f"conda env create --prefix {tempdir.name} -f {self.path}".split(" ")
         print(command)
-        proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=SHELL) # use Popen instead of run
+        proc = subprocess.Popen(
+            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=SHELL
+        )  # use Popen instead of run
         try:
-            stdoutdata, stderrdata = proc.communicate(timeout=5) # use communicate with timeout
-            print(stdoutdata.decode('utf-8'), stderrdata.decode('utf-8'))
+            stdoutdata, stderrdata = proc.communicate(
+                timeout=5
+            )  # use communicate with timeout
+            print(stdoutdata.decode("utf-8"), stderrdata.decode("utf-8"))
             return tempdir.name
         except subprocess.TimeoutExpired:
             print("The command timed out")
-            proc.kill() # kill the subprocess if timeout
+            proc.kill()  # kill the subprocess if timeout
             tempdir.cleanup()
-            return "cs230" # return pre-created
-        except KeyboardInterrupt: # catch keyboard interrupt
+            return "cs230"  # return pre-created
+        except KeyboardInterrupt:  # catch keyboard interrupt
             print("The user interrupted the command")
-            proc.terminate() # terminate the subprocess if interrupt
-            return "cs230" # return empty string if interrupt
+            proc.terminate()  # terminate the subprocess if interrupt
+            return "cs230"  # return empty string if interrupt
 
 
 """
 Worker thread receives message in a json format from scheduler, parse the json string, and execute the worker_task
 """
+
 
 def main():
     with open("config.json", "r") as f:
@@ -54,17 +59,18 @@ def main():
     messenger = PikaMessenger(
         broker_host=config["broker"]["broker_host"],
         broker_port=config["broker"]["broker_port"],
-        receive_topics=[]
+        receive_topics=[],
     )
 
-    try:    
+    try:
         messenger.consume()
         worker_main(config, messenger)
     except KeyboardInterrupt:
         messenger.stop_consuming()
     finally:
         del messenger
-        
+
+
 def worker_main(config, messenger):
     process = {}
     while True:
@@ -75,7 +81,7 @@ def worker_main(config, messenger):
             continue
 
         _, json_string = messenger.q.get()
-        
+
         data = json.loads(json_string)
         if data["CATEGORY"] == MessageCategory.scheduled_task:
             if data["body"]["worker_id"] != int(sys.argv[1]):
@@ -86,26 +92,39 @@ def worker_main(config, messenger):
         elif data["CATEGORY"] == MessageCategory.queue_request_response:
             continue
         else:
-            raise RuntimeError(
-                f"This is not the message expected from the scheduler.")
+            raise RuntimeError(f"This is not the message expected from the scheduler.")
 
 
 def run_task(body, config):
     task_id = body["task_id"]
     FTPServer = FileTransferClient(
-        host=config["broker"]["broker_host"], port=int(config["ftp"]["ftp_port"]), username="kunwp1", password="test"
+        host=config["broker"]["broker_host"],
+        port=int(config["ftp"]["ftp_port"]),
+        username="kunwp1",
+        password="test",
     )
     FTPServer.fetch_file(task_id)
     conda_manager = CondaManager(config["env"]["name"], config["env"]["path"])
     tempdir_name = conda_manager.build()
     os.chdir(str(task_id))
-    conda_command = (
-        "set TASK_ID=" + str(task_id) + "& " + "conda run -p {} ".format(os.path.join(os.path.dirname(__file__).replace("\\\\", "\\"), tempdir_name))
-        + body["python_command"]
+
+    conda_command = "conda run -p {1} {2}".format(
+        task_id,
+        os.path.join(os.path.dirname(__file__).replace("\\\\", "\\"), tempdir_name),
+        body["python_command"],
     )
-    p = subprocess.Popen(conda_command, shell=True, stdout=open("stdout.txt", "w"), stderr=open("stderr.txt", "w"))
-    os.chdir('..')
+    print(conda_command)
+
+    env = os.environ.copy()
+    env["TASK_ID"] = str(task_id)
+
+    with open("stdout.txt", "w") as stdout_f, open("stderr.txt", "w") as stderr_f:
+        p = subprocess.Popen(
+            conda_command, shell=True, stdout=stdout_f, stderr=stderr_f, env=env
+        )
+    os.chdir("..")
     return p, tempdir_name
+
 
 def handle_completed_process(process, messenger, config):
     to_remove = []
@@ -119,19 +138,24 @@ def handle_completed_process(process, messenger, config):
                 shutil.rmtree(env)
             os.chdir(str(task_id))
             FTPServer = FileTransferClient(
-                host=config["broker"]["broker_host"], port=int(config["ftp"]["ftp_port"]), username="kunwp1", password="test"
+                host=config["broker"]["broker_host"],
+                port=int(config["ftp"]["ftp_port"]),
+                username="kunwp1",
+                password="test",
             )
             FTPServer.upload_results(task_id, ["stdout.txt", "stderr.txt"])
-            os.chdir('..')
+            os.chdir("..")
             shutil.rmtree(str(task_id))
             msg_body = {"task_id": task_id, "status": exit_code}
             messenger.produce(
-                MessageBuilder.build(MessageCategory.task_status, msg_body), "worker_scheduler"
+                MessageBuilder.build(MessageCategory.task_status, msg_body),
+                "worker_scheduler",
             )
             to_remove.append(key)
-            
+
     for key in to_remove:
         del process[key]
+
 
 def test():
     with open("config.json", "r") as f:
