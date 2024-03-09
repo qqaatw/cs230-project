@@ -8,6 +8,7 @@ from queue import Queue
 from cs230_common.messenger import PikaMessenger
 from cs230_common.file_transfer_client import FileTransferClient
 from cs230_common.utils import *
+from measure_elapsed_time import Elapsed_Time_Tracker
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ class Scheduler:
             callback=self.on_message_received,
         )
         self.task_id = 0
+        self.elapsed_time_tracker = Elapsed_Time_Tracker()
 
     def consume_message(self):
         self.messenger.consume()
@@ -97,6 +99,8 @@ class Scheduler:
         # When API requested new task to scheduler (API message should contain "request")
         if category == MessageCategory.queue_request:
             self.new_task_requested(msg_body)
+            # If start time is None, set start time as the time queue_request message is received
+            self.elapsed_time_tracker.set_start_time()
 
         # When API uploaded file to FTP server (API message should contain "uploaded", "task_id": f"{task_id}")
         elif category == MessageCategory.queue_file_uploaded:
@@ -153,14 +157,24 @@ class Scheduler:
 
         # If task is completed, delete from ongoing_tasks
         if status == 0:
+            # Everytime scheduler receives termination message, update the end time
+            self.elapsed_time_tracker.update_end_time()
             if task_id in self.ongoing_tasks:
                 del self.ongoing_tasks[task_id]
                 LOGGER.info(
                     f"Task ID {task_id} completed and removed from ongoing_tasks."
                 )
 
+                # If there are no ongoing or waiting tasks, measure total elapsed time
+                if not self.ongoing_tasks and self.waiting_tasks_queue.empty():
+                    total_elapsed_time = self.elapsed_time_tracker.measure_elapsed_time()
+                    if total_elapsed_time is not None:
+                        print(f"Total elapsed time for all tasks: {total_elapsed_time}")
+                    else:
+                        LOGGER.info("Elapsed time measurement error of start time not set.")
+
                 # If waiting task exists, find available worker & put the task into ongoing_tasks & send message to the available worker
-                if not self.waiting_tasks_queue.empty():
+                elif not self.waiting_tasks_queue.empty():
                     LOGGER.info("Scheduling new task.")
                     (
                         next_task_id,

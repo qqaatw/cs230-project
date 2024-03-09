@@ -8,6 +8,7 @@ from queue import Queue
 from cs230_common.messenger import PikaMessenger
 from cs230_common.file_transfer_client import FileTransferClient
 from cs230_common.utils import *
+from measure_elapsed_time import Elapsed_Time_Tracker
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
@@ -21,7 +22,6 @@ class Scheduler:
     def __init__(self):
         self.new_tasks = {}  # key: task_id, {username, python_command}
         self.ongoing_tasks = {}  # key: task_id, {username, python_command, worker_id}
-        self.waiting_tasks_queue = Queue()
         self.worker_report_queue = Queue()
         self.messenger = PikaMessenger(
             broker_host=HOST,
@@ -31,29 +31,19 @@ class Scheduler:
         )
         self.task_id = 0
         self.last_assigned_worker_id = 0
+        self.elapsed_time_tracker = Elapsed_Time_Tracker()
 
     def consume_message(self):
         self.messenger.consume()
 
-    '''
-    # Find available worker
-    def find_available_worker(self, ongoing_tasks):
-        for worker_id in range(1, 4):
-            if worker_id not in [
-                task["worker_id"] for task in self.ongoing_tasks.values()
-            ]:
-                return worker_id
-        return None
-    '''
-
-    # Find available worker in round-robin way
+    # Find next worker in round-robin way
     def find_next_worker(self):
         available_worker_count = 3  # TODO : last_assigned_worker_id
         next_worker_id = (self.last_assigned_worker_id % available_worker_count) + 1
         self.last_assigned_worker_id = next_worker_id
         return next_worker_id
 
-    # 1. If worker is available put task into ongoing_tasks & if not into waiting_tasks queue
+    # 1. Assign task to next worker
     def new_tasks_scheduler(self):
         new_tasks = self.new_tasks  # key: task_id, {username, python_command}
         deleted = []
@@ -64,7 +54,7 @@ class Scheduler:
             python_command = new_tasks[task_id]["python_command"]
             next_worker_id = self.find_next_worker()
 
-            # If available put task into ongoing_tasks & send message to the available worker
+            # Put task into ongoing_tasks & send message to the next worker
             self.ongoing_tasks[task_id] = {
                     "username": username,
                     "python_command": python_command,
@@ -101,6 +91,8 @@ class Scheduler:
         # When API requested new task to scheduler (API message should contain "request")
         if category == MessageCategory.queue_request:
             self.new_task_requested(msg_body)
+            # If start time is None, set start time as the time queue_request message is received
+            self.elapsed_time_tracker.set_start_time()
 
         # When API uploaded file to FTP server (API message should contain "uploaded", "task_id": f"{task_id}")
         elif category == MessageCategory.queue_file_uploaded:
@@ -146,7 +138,7 @@ class Scheduler:
                 self.new_tasks[task_id]["python_command"] = python_command
 
     # 2-3. Consume message (task_status) from workers
-    # 2-3. If task is completed, Delete from ongoing_tasks & Put waiting task into ongoing_tasks and send start message to worker
+    # 2-3. If task is completed, Delete from ongoing_tasks
     def worker_message_handler(self, message):
         LOGGER.info(f"Message received: {message}")
         task_id = message["task_id"]
@@ -157,43 +149,22 @@ class Scheduler:
 
         # If task is completed, delete from ongoing_tasks
         if status == 0:
+            # Everytime scheduler receives termination message, update the end time
+            self.elapsed_time_tracker.update_end_time()
             if task_id in self.ongoing_tasks:
                 del self.ongoing_tasks[task_id]
                 LOGGER.info(
                     f"Task ID {task_id} completed and removed from ongoing_tasks."
                 )
-                '''
-                # If waiting task exists, find available worker & put the task into ongoing_tasks & send message to the available worker
-                if not self.waiting_tasks_queue.empty():
-                    LOGGER.info("Scheduling new task.")
-                    (
-                        next_task_id,
-                        username,
-                        python_command,
-                    ) = self.waiting_tasks_queue.get()
-                    available_worker_id = self.find_available_worker(self.ongoing_tasks)
-                    if available_worker_id is not None:
-                        self.ongoing_tasks[next_task_id] = {
-                            "username": username,
-                            "python_command": python_command,
-                            "worker_id": available_worker_id,
-                        }
-                        start_next_task_body = json.dumps(
-                            {
-                                "task_id": next_task_id,
-                                "username": username,
-                                "python_command": python_command,
-                                "worker_id": available_worker_id,
-                                "action": "start",
-                            }
-                        )
-                        start_next_task_msg = MessageBuilder.build(
-                            MessageCategory.scheduled_task, start_next_task_body, "OK"
-                        )
-                        self.messenger.produce_fanout(start_next_task_msg)
+
+                # If there are no ongoing tasks, measure total elapsed time
+                if not self.ongoing_tasks:
+                    total_elapsed_time = self.elapsed_time_tracker.measure_elapsed_time()
+                    if total_elapsed_time is not None:
+                        print(f"Total elapsed time for all tasks: {total_elapsed_time}")
                     else:
-                        LOGGER.error("No available worker ID found for the next task.")
-                '''
+                        LOGGER.info("Elapsed time measurement error of start time not set.")
+
         elif status == 1:
             LOGGER.error("An error occurred.")
         
