@@ -145,7 +145,7 @@ def handle_completed_process(process, messenger, config):
             FTPServer.upload_results(task_id, ["stdout.txt", "stderr.txt"])
             os.chdir("..")
             shutil.rmtree(str(task_id))
-            msg_body = {"task_id": task_id, "status": exit_code}
+            msg_body = {"task_id": task_id, "status": exit_code, "worker_id": int(sys.argv[1])}
             messenger.produce(
                 MessageBuilder.build(MessageCategory.task_status, msg_body),
                 "worker_scheduler",

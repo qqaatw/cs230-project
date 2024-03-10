@@ -9,6 +9,7 @@ import sys
 from cs230_common.messenger import PikaMessenger
 from cs230_common.file_transfer_client import FileTransferClient
 from cs230_common.utils import *
+from priority_based import PriorityQueue, Task
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
@@ -19,11 +20,19 @@ TOPICS = ["api_to_scheduler", "worker_scheduler"]
 SCHEDULING_ALGORITHMS = ["next-available", "round-robin", "priority-based"]
 NUMBER_WORKERS = 3;
 
+# Assume the WORKER_MEMORY_SIZE is in descending order
+with open("../worker/config.json", "r") as f:
+    config = json.load(f)     
+    WORKER_MEMORY_SIZE = []
+    for i in range(NUMBER_WORKERS):
+        WORKER_MEMORY_SIZE.append(config["workers"][str(i+1)]["GPU"])
+
 class Scheduler:
     def __init__(self):
         self.new_tasks = {}  # key: task_id, {username, python_command}
         self.ongoing_tasks = {}  # key: task_id, {username, python_command, worker_id}
-        self.waiting_tasks_queue = Queue()
+        self.initialize_waiting_tasks()
+        
         self.worker_report_queue = Queue()
         self.messenger = PikaMessenger(
             broker_host=HOST,
@@ -34,14 +43,48 @@ class Scheduler:
         self.task_id = 0
         self.last_assigned_worker_id = 0
 
+    def initialize_waiting_tasks(self):
+        # Next-available
+        if sys.argv[1] == SCHEDULING_ALGORITHMS[0]:
+            self.waiting_tasks = Queue()
+        # Round-robin
+        elif sys.argv[1] == SCHEDULING_ALGORITHMS[1]:
+            self.waiting_tasks = {}
+            for i in range(NUMBER_WORKERS):
+                self.waiting_tasks[i+1] = Queue()
+        # Priority-based
+        elif sys.argv[1] == SCHEDULING_ALGORITHMS[2]:
+            self.waiting_tasks = PriorityQueue()
+            
+    def waiting_task_exists(self, worker_id):
+        # Next-available
+        if sys.argv[1] == SCHEDULING_ALGORITHMS[0]:
+            return not self.waiting_tasks.empty()
+        # Round-robin
+        elif sys.argv[1] == SCHEDULING_ALGORITHMS[1]:
+            return not self.waiting_tasks[worker_id].empty()
+        # Priority-based
+        elif sys.argv[1] == SCHEDULING_ALGORITHMS[2]:
+            return not self.waiting_tasks.empty()
+        else:
+            raise Exception("Unreachable [waiting_task_exists]")
+        
+    def add_waiting_task(self, task_id, username, python_command, model_size, num_iterations):
+        if sys.argv[1] == SCHEDULING_ALGORITHMS[0]:
+            self.waiting_tasks.put((task_id, username, python_command))
+        elif sys.argv[1] == SCHEDULING_ALGORITHMS[1]:
+            self.waiting_tasks[self.last_assigned_worker_id].put((task_id, username, python_command))
+        elif sys.argv[1] == SCHEDULING_ALGORITHMS[2]:
+            self.waiting_tasks.push(Task(task_id, username, python_command, model_size, num_iterations))
+        
     def consume_message(self):
         self.messenger.consume()
         
-    def next_available(self, ongoing_tasks):
-        for worker_id in range(1, NUMBER_WORKERS + 1):
+    def next_available(self, model_size):
+        for worker_id in range(NUMBER_WORKERS, 0, -1):
             if worker_id not in [
                 task["worker_id"] for task in self.ongoing_tasks.values()
-            ]:
+            ] and model_size <= WORKER_MEMORY_SIZE[worker_id-1]:
                 return worker_id
         return None
     
@@ -49,22 +92,66 @@ class Scheduler:
         available_worker_count = NUMBER_WORKERS
         next_worker_id = (self.last_assigned_worker_id % available_worker_count) + 1
         self.last_assigned_worker_id = next_worker_id
+        if next_worker_id in [task["worker_id"] for task in self.ongoing_tasks.values()]:
+            return None
         return next_worker_id
-    
-    def priority_based(self):
-        raise Exception("TODO") 
 
     # Find available worker
-    def next_worker(self, ongoing_tasks):
-        if sys.argv[1] == SCHEDULING_ALGORITHMS[0]:
-            return self.next_available(ongoing_tasks)
+    def next_worker(self, model_size = 0):
+        if sys.argv[1] in [SCHEDULING_ALGORITHMS[0], SCHEDULING_ALGORITHMS[2]]:
+            return self.next_available(model_size)
         elif sys.argv[1] == SCHEDULING_ALGORITHMS[1]:
             return self.round_robin()
-        elif sys.argv[1] == SCHEDULING_ALGORITHMS[2]:
-            return self.priority_based()
         else:
-            raise Exception("Unreachable")
-
+            raise Exception("Unreachable [next_worker]")
+        
+    def schedule_waiting_task(self, free_worker_id):
+        LOGGER.info("Scheduling waiting tasks.")
+        if sys.argv[1] == SCHEDULING_ALGORITHMS[0]:
+            task_id, username, python_command = self.waiting_tasks.get()
+            self.send_msg_to_worker(task_id, username, python_command, free_worker_id)
+        elif sys.argv[1] == SCHEDULING_ALGORITHMS[1]:
+            task_id, username, python_command = self.waiting_tasks[free_worker_id].get()
+            self.send_msg_to_worker(task_id, username, python_command, free_worker_id)
+        elif sys.argv[1] == SCHEDULING_ALGORITHMS[2]:
+            self.waiting_tasks.age_tasks()
+            waiting_tasks = []
+            msg_sent = False
+            while not self.waiting_tasks.empty():
+                waiting_task = self.waiting_tasks.pop()
+                if free_worker_id == self.next_worker(waiting_task.size):
+                    self.send_msg_to_worker(waiting_task.task_id, waiting_task.username, waiting_task.python_command, free_worker_id)
+                    msg_sent = True
+                    break
+                else:
+                    waiting_tasks.append(waiting_task)
+            
+            for task in waiting_tasks:
+                self.waiting_tasks.push(task)
+            
+            if not msg_sent:
+                LOGGER.error("No available worker ID found for the next task.")
+        else:
+            raise Exception("Unreachable [scheduling]")
+    
+    def send_msg_to_worker(self, task_id, username, python_command, worker_id):
+        self.ongoing_tasks[task_id] = {
+            "username": username,
+            "python_command": python_command,
+            "worker_id": worker_id,
+        }
+        body = {
+            "task_id": task_id,
+            "username": username,
+            "python_command": python_command,
+            "worker_id": worker_id,
+            "action": "start",
+        }
+        msg_to_worker = MessageBuilder.build(
+            MessageCategory.scheduled_task, body, "OK"
+        )
+        self.messenger.produce_fanout(msg_to_worker)            
+    
     # 1. If worker is available put task into ongoing_tasks & if not into waiting_tasks queue
     def new_tasks_scheduler(self):
         new_tasks = self.new_tasks  # key: task_id, {username, python_command}
@@ -74,33 +161,18 @@ class Scheduler:
             if "python_command" not in new_tasks[task_id]:
                 continue
             python_command = new_tasks[task_id]["python_command"]
-            next_worker_id = self.next_worker(self.ongoing_tasks)
+            model_size = new_tasks[task_id]["model_size"]
+            num_iterations = new_tasks[task_id]["num_iterations"]
+            next_worker_id = self.next_worker(model_size)
 
             # If available put task into ongoing_tasks & send message to the available worker
-            if next_worker_id:
-                self.ongoing_tasks[task_id] = {
-                    "username": username,
-                    "python_command": python_command,
-                    "worker_id": next_worker_id,
-                }
-                start_new_tasks_msg = MessageBuilder.build(
-                    MessageCategory.scheduled_task,
-                    {
-                        "task_id": task_id,
-                        "username": username,
-                        "python_command": python_command,
-                        "worker_id": next_worker_id,
-                        "action": "start",
-                    },
-                    "OK",
-                )
-                self.messenger.produce_fanout(start_new_tasks_msg)
+            if next_worker_id != None:
+                self.send_msg_to_worker(task_id, username, python_command, next_worker_id)
                 deleted.append(task_id)
-
             # If not put task into waiting_tasks queue
             else:
-                self.waiting_tasks_queue.put((task_id, username, python_command))
-
+                self.add_waiting_task(task_id, username, python_command, model_size, num_iterations)
+            
         for deleted_ in deleted:
             del new_tasks[deleted_]
 
@@ -160,6 +232,8 @@ class Scheduler:
                     f"Task ID {task_id} with Python command {python_command} was uploaded successfully."
                 )
                 self.new_tasks[task_id]["python_command"] = python_command
+                self.new_tasks[task_id]["model_size"] = message["metrics"]["num_params"] * message["metrics"]["precision"]
+                self.new_tasks[task_id]["num_iterations"] = 0 # TODO
 
     # 2-3. Consume message (task_status) from workers
     # 2-3. If task is completed, Delete from ongoing_tasks & Put waiting task into ongoing_tasks and send start message to worker
@@ -167,6 +241,7 @@ class Scheduler:
         LOGGER.info(f"Message received: {message}")
         task_id = message["task_id"]
         status = message["status"]
+        worker_id = message["worker_id"]
 
         # Put status message into worker_report_queue
         self.worker_report_queue.put(message)
@@ -180,37 +255,10 @@ class Scheduler:
                 )
 
                 # If waiting task exists, find available worker & put the task into ongoing_tasks & send message to the available worker
-                if not self.waiting_tasks_queue.empty():
-                    LOGGER.info("Scheduling new task.")
-                    (
-                        next_task_id,
-                        username,
-                        python_command,
-                    ) = self.waiting_tasks_queue.get()
-                    available_worker_id = self.next_worker(self.ongoing_tasks)
-                    if available_worker_id is not None:
-                        self.ongoing_tasks[next_task_id] = {
-                            "username": username,
-                            "python_command": python_command,
-                            "worker_id": available_worker_id,
-                        }
-                        start_next_task_body = {
-                            "task_id": next_task_id,
-                            "username": username,
-                            "python_command": python_command,
-                            "worker_id": available_worker_id,
-                            "action": "start",
-                        }
-                        start_next_task_msg = MessageBuilder.build(
-                            MessageCategory.scheduled_task, start_next_task_body, "OK"
-                        )
-                        self.messenger.produce_fanout(start_next_task_msg)
-                    else:
-                        LOGGER.error("No available worker ID found for the next task.")
-
-        elif status == 1:
+                if self.waiting_task_exists(worker_id):
+                    self.schedule_waiting_task(worker_id)
+        else:
             LOGGER.error("An error occurred.")
-
 
 def scheduler_main():
     scheduler = Scheduler()
