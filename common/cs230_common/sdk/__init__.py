@@ -1,10 +1,10 @@
 import os
 import time
-import json
 import logging
+import traceback
 
 from ..messenger import PikaMessenger
-from ..utils import MessageCategory, Channels, MessageBuilder
+from ..utils import MessageCategory, Channels, MessageBuilder, TrainingResult
 from ..file_transfer_client import FileTransferClient
 
 LOGGER = logging.getLogger(__name__)
@@ -34,9 +34,6 @@ class SDK:
         )
         self.messenger.consume()
 
-    def __del__(self):
-        self.messenger.stop_consuming()
-
     def __login(self, username: str, password: str) -> bool:
         """(Unused for now) Login to the system.
 
@@ -55,29 +52,43 @@ class SDK:
         # ftp =  FTP()
         ...
 
-    def _wait_response(self, timeout: float = 5.0):
+    def _wait_response(self, expected_category, timeout: float = 5.0):
         start = time.time()
-        while self.messenger.q.empty() and (time.time() - start) < timeout:
-            pass
-        if self.messenger.q.empty():
+        response = {}
+        while (time.time() - start) < timeout:
+            if not self.messenger.q.empty():
+                response = self._verify_response(
+                    self.messenger.q.get()[1], expected_category
+                )
+                if response != {}:
+                    break
+        if response == {}:
             raise TimeoutError("The reponse time out.")
-        return self.messenger.q.get()
+        return response
 
-    def _verify_response(self, response: str, expected_category: MessageCategory):
-        print(response)
-        obj = json.loads(response)
+    def _verify_response(
+        self, response: str, expected_category: MessageCategory
+    ) -> dict:
+        category, body = MessageBuilder.extract(response)
 
-        assert "CATEGORY" in obj, "CATEGORY field is not in the response"
+        if category != expected_category:
+            return {}
 
-        if obj["CATEGORY"] != expected_category:
-            raise RuntimeError(
-                f"The expected category is {expected_category}, but the received one is {obj['CATEGORY']}"
-            )
+        return body
 
-        if obj["status"] != "OK":
-            raise RuntimeError(f"Error: {obj['status']}")
-
-        return obj["body"]
+    def _check_results(self, task_id: int) -> str:
+        """Retrieve results from the file server. Return a bool indicting succees or not for now."""
+        client = FileTransferClient(
+            self.ftp_host, self.ftp_port, self.username, self.password
+        )
+        files = client.list_files(f"{task_id}/")
+        if f"{task_id}/results" in files:
+            results = client.list_files(f"{task_id}/results")
+            for result in results:
+                if result.endswith(".pt"):
+                    return TrainingResult.completed
+            return TrainingResult.error
+        return TrainingResult.in_progress
 
     def device(self):
         import torch
@@ -112,7 +123,7 @@ class SDK:
         )
         self.messenger.produce(message, Channels.sdk_scheduler)
 
-    def report(self, task_id: int, model_path: str, tfevent_path: str | None):
+    def report(self, model_path: str, tfevent_path: str | None):
         """Upload the trained model and logs to the file server.
 
         Parameters
@@ -126,9 +137,15 @@ class SDK:
             self.ftp_host, self.ftp_port, self.username, self.password
         )
 
-        client.upload_results(task_id, [model_path, tfevent_path] if tfevent_path else [model_path])
+        client.upload_results(
+            self.get_task_id(),
+            [model_path, tfevent_path] if tfevent_path else [model_path],
+        )
+        print("Results uploaded")
 
-        message = MessageBuilder.build(MessageCategory.report, {"task_id": task_id})
+        message = MessageBuilder.build(
+            MessageCategory.report, {"task_id": self.get_task_id()}
+        )
 
         self.messenger.produce(message, Channels.worker_scheduler)
 
@@ -139,14 +156,15 @@ class SDK:
             MessageCategory.queue_request, {"username": self.username}
         )
         self.messenger.produce(message, "api_to_scheduler")
-        queue_name, body = self._wait_response()
-        body = self._verify_response(body, "queue_request_response")
+        body = self._wait_response("queue_request_response")
 
         assert "task_id" in body
 
         return body["task_id"]
 
-    def upload_task(self, task_id: int, file_list: list[str], python_command: str, metrics: dict):
+    def upload_task(
+        self, task_id: int, file_list: list[str], python_command: str, metrics: dict
+    ):
         """Upload user code and notify the scheduler.
 
         Parameters
@@ -178,13 +196,14 @@ class SDK:
     def measure_parameters(self, model):
         return {
             "num_params": sum(p.numel() for p in model.parameters()),
-            "precision": next(model.parameters()).element_size()
+            "precision": next(model.parameters()).element_size(),
         }
 
     def get_scheduling_status(self):
         ...
 
-    def launch(self, fn: callable):
+    @staticmethod
+    def launch(sdk, fn: callable, *args, **kwargs):
         """Launch the main program with error handling.
 
         Parameters
@@ -195,8 +214,10 @@ class SDK:
 
         try:
             try:
-                fn(self) 
+                fn(sdk, *args, **kwargs)
+            except:
+                traceback.print_exc()
             finally:
-                self.messenger.stop_consuming()
+                sdk.messenger.stop_consuming()
         except:
             ...

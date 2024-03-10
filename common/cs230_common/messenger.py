@@ -32,11 +32,11 @@ class PikaMessenger:
         callback: callable = None,
     ):
         self.conn = pika.BlockingConnection(
-            pika.ConnectionParameters(host=broker_host, port=broker_port)
+            pika.ConnectionParameters(host=broker_host, port=broker_port, heartbeat=0)
         )
         self.channel = self.conn.channel()
         self.publish_conn = pika.BlockingConnection(
-            pika.ConnectionParameters(host=broker_host, port=broker_port)
+            pika.ConnectionParameters(host=broker_host, port=broker_port, heartbeat=0)
         )
         self.publish_conn_channel = self.publish_conn.channel()
         self._callback = self._default_callback if callback is None else callback
