@@ -112,7 +112,7 @@ def run_task(body, config):
         os.path.join(os.path.dirname(__file__).replace("\\\\", "\\"), tempdir_name),
         body["python_command"],
     )
-    print(conda_command)
+    print(f"Running task_id: {task_id} Command: {conda_command}")
 
     env = os.environ.copy()
     env["TASK_ID"] = str(task_id)
