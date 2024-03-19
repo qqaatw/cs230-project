@@ -19,7 +19,7 @@ HOST = "18.119.97.104"
 PORT = "5673"
 TOPICS = ["api_to_scheduler", "worker_scheduler"]
 SCHEDULING_ALGORITHMS = ["next-available", "round-robin", "priority-based"]
-NUMBER_WORKERS = 3;
+NUMBER_WORKERS = 2;
 
 # Assume the WORKER_MEMORY_SIZE is in descending order
 with open("../worker/config.json", "r") as f:
@@ -127,6 +127,9 @@ class Scheduler:
             self.waiting_tasks.age_tasks()
             waiting_tasks = []
             msg_sent = False
+            
+            LOGGER.info("Waiting Task Size: " + str(self.waiting_tasks.size()))
+            
             while not self.waiting_tasks.empty():
                 waiting_task = self.waiting_tasks.pop()
                 if free_worker_id == self.next_worker(waiting_task.size):
@@ -139,6 +142,8 @@ class Scheduler:
             
             for task in waiting_tasks:
                 self.waiting_tasks.push(task)
+                
+            LOGGER.info("Waiting Task Size: " + str(self.waiting_tasks.size()))
             
             if not msg_sent:
                 LOGGER.error("No available worker ID found for the next task.")
@@ -180,11 +185,12 @@ class Scheduler:
             if next_worker_id != None:
                 self.send_msg_to_worker(task_id, username, python_command, next_worker_id)
                 LOGGER.info("Task ID: " + str(task_id) + ", Model Size: " + str(model_size) + ", Worker ID: " + str(next_worker_id))
-                deleted.append(task_id)
             # If not put task into waiting_tasks queue
             else:
                 self.add_waiting_task(task_id, username, python_command, model_size, num_iterations)
-            
+        
+            deleted.append(task_id)
+
         for deleted_ in deleted:
             del new_tasks[deleted_]
 
@@ -247,7 +253,7 @@ class Scheduler:
                 )
                 self.new_tasks[task_id]["python_command"] = python_command
                 self.new_tasks[task_id]["model_size"] = message["metrics"]["num_params"] * message["metrics"]["precision"]
-                self.new_tasks[task_id]["num_iterations"] = 0
+                self.new_tasks[task_id]["num_iterations"] = message["metrics"]["num_iterations"]
 
     # 2-3. Consume message (task_status) from workers
     # 2-3. If task is completed, Delete from ongoing_tasks & Put waiting task into ongoing_tasks and send start message to worker
