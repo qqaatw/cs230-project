@@ -25,7 +25,7 @@ num_dot = 0
 
 
 def args_to_str(args):
-    return " ".join((f"--{k} {v}" for k, v in vars(args).items()))
+    return " ".join((("--inference" if v else "") if k == "inference" else f"--{k} {v}" for k, v in vars(args).items()))
 
 
 def print_log(log, ending="\r"):
@@ -67,7 +67,7 @@ def main(sdk: SDK, args, general_args, hyperparameter_args):
         hyperparameter_args.inference = inference
 
         print(f"ID: {idx} Model Name: {model_name} Metrics: {metrics} Inference: {inference}")
-        
+
         task_id = sdk.request_scheduling()
         task_ids.add(task_id)
         python_command = " ".join(
