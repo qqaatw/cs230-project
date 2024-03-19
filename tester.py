@@ -66,7 +66,7 @@ def main(sdk: SDK, args, general_args, hyperparameter_args):
         metrics.update({"num_iterations": args.num_epochs})
         hyperparameter_args.inference = inference
 
-        print(idx, model_name, metrics)
+        print(f"ID: {idx} Model Name: {model_name} Metrics: {metrics} Inference: {inference}")
         
         task_id = sdk.request_scheduling()
         task_ids.add(task_id)
