@@ -48,17 +48,24 @@ def main(sdk: SDK, args, general_args, hyperparameter_args):
     if len(args.models) == 0:
         args.models = random.choices(list(model_map.keys()), k=args.num_tasks)
 
+    if args.inference:
+        inference_flags = [True for _ in range(args.num_tasks)]
+    else:
+        inference_flags = random.choices([True, False], k=args.num_tasks)
+
+
     assert (
         args.num_tasks == len(args.models)
     ), f"The number of tasks ({args.num_tasks}) should match the number of models ({len(args.models)})"
 
     task_ids = set()
 
-    for idx, model_name in enumerate(args.models, 1):
+    for idx, (model_name, inference) in enumerate(zip(args.models, inference_flags), 1):
         model = model_map[model_name]()
         metrics = sdk.measure_parameters(model)
         metrics.update({"num_iterations": args.num_epochs})
-        
+        hyperparameter_args.inference = inference
+
         print(idx, model_name, metrics)
         
         task_id = sdk.request_scheduling()

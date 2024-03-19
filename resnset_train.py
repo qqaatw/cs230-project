@@ -65,29 +65,30 @@ def main(sdk, args):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
-    t = time.time()
-    # Training loop
-    total_steps = len(train_loader)
-    for epoch in range(args.num_epochs):
-        for i, (images, labels) in enumerate(train_loader):
-            images = images.to(device)
-            labels = labels.to(device)
 
-            # Forward pass
-            outputs = model(images)
-            loss = criterion(outputs, labels)
+    if not args.inference:
+        # Training loop
+        total_steps = len(train_loader)
+        for epoch in range(args.num_epochs):
+            for i, (images, labels) in enumerate(train_loader):
+                images = images.to(device)
+                labels = labels.to(device)
 
-            # Backward and optimize
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+                # Forward pass
+                outputs = model(images)
+                loss = criterion(outputs, labels)
 
-            if (i + 1) % 100 == 0:
-                print(
-                    "Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}".format(
-                        epoch + 1, args.num_epochs, i + 1, total_steps, loss.item()
+                # Backward and optimize
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                if (i + 1) % 100 == 0:
+                    print(
+                        "Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}".format(
+                            epoch + 1, args.num_epochs, i + 1, total_steps, loss.item()
+                        )
                     )
-                )
 
     # Test the model
     model.eval()  # Set the model to evaluation mode
