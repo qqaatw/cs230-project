@@ -19,7 +19,7 @@ HOST = "18.119.97.104"
 PORT = "5673"
 TOPICS = ["api_to_scheduler", "worker_scheduler"]
 SCHEDULING_ALGORITHMS = ["next-available", "round-robin", "priority-based"]
-NUMBER_WORKERS = 1;
+NUMBER_WORKERS = 3;
 
 # Assume the WORKER_MEMORY_SIZE is in descending order
 with open("../worker/config.json", "r") as f:
@@ -103,7 +103,7 @@ class Scheduler:
         while True:
             next_worker_id = (self.last_assigned_worker_id % available_worker_count) + 1
             self.last_assigned_worker_id = next_worker_id
-            if not inference_task and model_size <= WORKER_MEMORY_SIZE[next_worker_id - 1]:
+            if not inference_task and model_size > WORKER_MEMORY_SIZE[next_worker_id - 1]:
                 continue
             else:
                 break
@@ -127,13 +127,13 @@ class Scheduler:
             waiting_tasks = []
             msg_sent = False
             
-            LOGGER.info("Waiting Task Size: " + str(self.waiting_tasks.size()))
+            LOGGER.info("Waiting Task Size: " + str(self.waiting_tasks.qsize()))
             
             while not self.waiting_tasks.empty():
                 task_id, username, python_command, model_size, inference = self.waiting_tasks.get()
                 if free_worker_id == self.next_worker(model_size, inference):
                     self.send_msg_to_worker(task_id, username, python_command, free_worker_id)
-                    LOGGER.info("Task ID: " + str(waiting_task.task_id) + ", Model Size: " + str(waiting_task.size) + ", Worker ID: " + str(free_worker_id))
+                    LOGGER.info("Task ID: " + str(task_id) + ", Model Size: " + str(model_size) + ", Worker ID: " + str(free_worker_id))
                     msg_sent = True
                     break
                 else:
@@ -142,7 +142,7 @@ class Scheduler:
             for task_id, username, python_command, model_size, inference in waiting_tasks:
                 self.waiting_tasks.push((task_id, username, python_command, model_size, inference))
                 
-            LOGGER.info("Waiting Task Size: " + str(self.waiting_tasks.size()))
+            LOGGER.info("Waiting Task Size: " + str(self.waiting_tasks.qsize()))
             
             if not msg_sent:
                 LOGGER.error("No available worker ID found for the next task.")
