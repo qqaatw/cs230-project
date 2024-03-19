@@ -6,12 +6,13 @@ W_size = 1
 W_iteration = 1
 
 class Task:
-    def __init__(self, task_id, username, python_command, size, iteration, age=0):
+    def __init__(self, task_id, username, python_command, size, iteration, inference, age=0):
         self.task_id = task_id
         self.username = username
         self.python_command = python_command
         self.size = size
         self.iteration = iteration
+        self.inference = inference
         self.age = age
 
     def __lt__(self, other):

@@ -23,7 +23,7 @@ NUMBER_WORKERS = 2;
 
 # Assume the WORKER_MEMORY_SIZE is in descending order
 with open("../worker/config.json", "r") as f:
-    config = json.load(f)     
+    config = json.load(f)
     WORKER_MEMORY_SIZE = []
     for i in range(NUMBER_WORKERS):
         WORKER_MEMORY_SIZE.append(config["workers"][str(i+1)]["GPU"])
@@ -79,39 +79,45 @@ class Scheduler:
         else:
             raise Exception("Unreachable [waiting_tasks_empty]")
         
-    def add_waiting_task(self, task_id, username, python_command, model_size, num_iterations):
+    def add_waiting_task(self, task_id, username, python_command, model_size, num_iterations, inference):
         if sys.argv[1] == SCHEDULING_ALGORITHMS[0]:
             self.waiting_tasks.put((task_id, username, python_command))
         elif sys.argv[1] == SCHEDULING_ALGORITHMS[1]:
             self.waiting_tasks[self.last_assigned_worker_id].put((task_id, username, python_command))
         elif sys.argv[1] == SCHEDULING_ALGORITHMS[2]:
-            self.waiting_tasks.push(Task(task_id, username, python_command, model_size, num_iterations))
+            self.waiting_tasks.push(Task(task_id, username, python_command, model_size, num_iterations, inference))
         
     def consume_message(self):
         self.messenger.consume()
         
-    def next_available(self, model_size):
+    def next_available(self, model_size, inference_task):
         for worker_id in range(NUMBER_WORKERS, 0, -1):
             if worker_id not in [
                 task["worker_id"] for task in self.ongoing_tasks.values()
-            ] and model_size <= WORKER_MEMORY_SIZE[worker_id-1]:
+            ] and (inference_task or model_size <= WORKER_MEMORY_SIZE[worker_id-1]):
                 return worker_id
         return None
     
-    def round_robin(self):
+    def round_robin(self, model_size, inference_task):
         available_worker_count = NUMBER_WORKERS
-        next_worker_id = (self.last_assigned_worker_id % available_worker_count) + 1
-        self.last_assigned_worker_id = next_worker_id
+        while True:
+            next_worker_id = (self.last_assigned_worker_id % available_worker_count) + 1
+            self.last_assigned_worker_id = next_worker_id
+            if not inference_task and model_size <= WORKER_MEMORY_SIZE[next_worker_id - 1]:
+                continue
+            else:
+                break
+        
         if next_worker_id in [task["worker_id"] for task in self.ongoing_tasks.values()]:
             return None
         return next_worker_id
 
     # Find available worker
-    def next_worker(self, model_size = 0):
+    def next_worker(self, model_size, inference_task):
         if sys.argv[1] in [SCHEDULING_ALGORITHMS[0], SCHEDULING_ALGORITHMS[2]]:
-            return self.next_available(model_size)
+            return self.next_available(model_size, inference_task)
         elif sys.argv[1] == SCHEDULING_ALGORITHMS[1]:
-            return self.round_robin()
+            return self.round_robin(model_size, inference_task)
         else:
             raise Exception("Unreachable [next_worker]")
         
@@ -132,7 +138,7 @@ class Scheduler:
             
             while not self.waiting_tasks.empty():
                 waiting_task = self.waiting_tasks.pop()
-                if free_worker_id == self.next_worker(waiting_task.size):
+                if free_worker_id == self.next_worker(waiting_task.size, waiting_task.inference):
                     self.send_msg_to_worker(waiting_task.task_id, waiting_task.username, waiting_task.python_command, free_worker_id)
                     LOGGER.info("Task ID: " + str(waiting_task.task_id) + ", Model Size: " + str(waiting_task.size) + ", Worker ID: " + str(free_worker_id))
                     msg_sent = True
@@ -179,7 +185,8 @@ class Scheduler:
             python_command = new_tasks[task_id]["python_command"]
             model_size = new_tasks[task_id]["model_size"]
             num_iterations = new_tasks[task_id]["num_iterations"]
-            next_worker_id = self.next_worker(model_size)
+            inference = new_tasks["inference"]
+            next_worker_id = self.next_worker(model_size, inference)
 
             # If available put task into ongoing_tasks & send message to the available worker
             if next_worker_id != None:
@@ -187,7 +194,7 @@ class Scheduler:
                 LOGGER.info("Task ID: " + str(task_id) + ", Model Size: " + str(model_size) + ", Worker ID: " + str(next_worker_id))
             # If not put task into waiting_tasks queue
             else:
-                self.add_waiting_task(task_id, username, python_command, model_size, num_iterations)
+                self.add_waiting_task(task_id, username, python_command, model_size, num_iterations, inference)
         
             deleted.append(task_id)
 
