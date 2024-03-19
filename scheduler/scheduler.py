@@ -310,6 +310,8 @@ class Scheduler:
                 total_elapsed_time = self.elapsed_time_tracker.measure_elapsed_time()
                 if total_elapsed_time is not None:
                     LOGGER.info(f"Total elapsed time for all tasks: {total_elapsed_time}")
+                    with open(f"result-{sys.argv[1]}.txt", "a") as f:
+                        f.write(f"Total elapsed time for all tasks: {total_elapsed_time}")
                 else:
                     LOGGER.info("Elapsed time measurement error or start time not set.")
 
