@@ -19,7 +19,7 @@ HOST = "18.119.97.104"
 PORT = "5673"
 TOPICS = ["api_to_scheduler", "worker_scheduler"]
 SCHEDULING_ALGORITHMS = ["next-available", "round-robin", "priority-based"]
-NUMBER_WORKERS = 2;
+NUMBER_WORKERS = 1;
 
 # Assume the WORKER_MEMORY_SIZE is in descending order
 with open("../worker/config.json", "r") as f:
@@ -205,7 +205,7 @@ class Scheduler:
             python_command = new_tasks[task_id]["python_command"]
             model_size = new_tasks[task_id]["model_size"]
             num_iterations = new_tasks[task_id]["num_iterations"]
-            inference = new_tasks["inference"]
+            inference = new_tasks[task_id]["inference"]
             next_worker_id = self.next_worker(model_size, inference)
 
             # If available put task into ongoing_tasks & send message to the available worker
@@ -281,6 +281,7 @@ class Scheduler:
                 self.new_tasks[task_id]["python_command"] = python_command
                 self.new_tasks[task_id]["model_size"] = message["metrics"]["num_params"] * message["metrics"]["precision"]
                 self.new_tasks[task_id]["num_iterations"] = message["metrics"]["num_iterations"]
+                self.new_tasks[task_id]["inference"] = message["inference"]
 
     # 2-3. Consume message (task_status) from workers
     # 2-3. If task is completed, Delete from ongoing_tasks & Put waiting task into ongoing_tasks and send start message to worker
@@ -294,27 +295,27 @@ class Scheduler:
         self.worker_report_queue.put(message)
 
         # If task is completed, delete from ongoing_tasks
-        if status == 0:
-            if task_id in self.ongoing_tasks:
-                del self.ongoing_tasks[task_id]
-                LOGGER.info(
-                    f"Task ID {task_id} completed and removed from ongoing_tasks."
-                )
-                # Update end time every time a task is completed
-                self.elapsed_time_tracker.update_end_time()
-                # If there are no ongoing tasks and waiting tasks, measure total elapsed time
-                if not self.ongoing_tasks and self.waiting_tasks_empty():
-                    total_elapsed_time = self.elapsed_time_tracker.measure_elapsed_time()
-                    if total_elapsed_time is not None:
-                        LOGGER.info(f"Total elapsed time for all tasks: {total_elapsed_time}")
-                    else:
-                        LOGGER.info("Elapsed time measurement error or start time not set.")
-
-                # If waiting task exists, find available worker & put the task into ongoing_tasks & send message to the available worker
-                if self.waiting_task_exists(worker_id):
-                    self.schedule_waiting_task(worker_id)
-        else:
+        if status != 0:
             LOGGER.error("An error occurred.")
+        
+        if task_id in self.ongoing_tasks:
+            del self.ongoing_tasks[task_id]
+            LOGGER.info(
+                f"Task ID {task_id} completed and removed from ongoing_tasks."
+            )
+            # Update end time every time a task is completed
+            self.elapsed_time_tracker.update_end_time()
+            # If there are no ongoing tasks and waiting tasks, measure total elapsed time
+            if not self.ongoing_tasks and self.waiting_tasks_empty():
+                total_elapsed_time = self.elapsed_time_tracker.measure_elapsed_time()
+                if total_elapsed_time is not None:
+                    LOGGER.info(f"Total elapsed time for all tasks: {total_elapsed_time}")
+                else:
+                    LOGGER.info("Elapsed time measurement error or start time not set.")
+
+            # If waiting task exists, find available worker & put the task into ongoing_tasks & send message to the available worker
+            if self.waiting_task_exists(worker_id):
+                self.schedule_waiting_task(worker_id)
 
 def scheduler_main():
     scheduler = Scheduler()
