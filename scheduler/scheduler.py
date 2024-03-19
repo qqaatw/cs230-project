@@ -81,7 +81,7 @@ class Scheduler:
         
     def add_waiting_task(self, task_id, username, python_command, model_size, num_iterations, inference):
         if sys.argv[1] == SCHEDULING_ALGORITHMS[0]:
-            self.waiting_tasks.put((task_id, username, python_command))
+            self.waiting_tasks.put((task_id, username, python_command, model_size, inference))
         elif sys.argv[1] == SCHEDULING_ALGORITHMS[1]:
             self.waiting_tasks[self.last_assigned_worker_id].put((task_id, username, python_command))
         elif sys.argv[1] == SCHEDULING_ALGORITHMS[2]:
@@ -124,8 +124,28 @@ class Scheduler:
     def schedule_waiting_task(self, free_worker_id):
         LOGGER.info("Scheduling waiting tasks.")
         if sys.argv[1] == SCHEDULING_ALGORITHMS[0]:
-            task_id, username, python_command = self.waiting_tasks.get()
-            self.send_msg_to_worker(task_id, username, python_command, free_worker_id)
+            waiting_tasks = []
+            msg_sent = False
+            
+            LOGGER.info("Waiting Task Size: " + str(self.waiting_tasks.size()))
+            
+            while not self.waiting_tasks.empty():
+                task_id, username, python_command, model_size, inference = self.waiting_tasks.get()
+                if free_worker_id == self.next_worker(model_size, inference):
+                    self.send_msg_to_worker(task_id, username, python_command, free_worker_id)
+                    LOGGER.info("Task ID: " + str(waiting_task.task_id) + ", Model Size: " + str(waiting_task.size) + ", Worker ID: " + str(free_worker_id))
+                    msg_sent = True
+                    break
+                else:
+                    waiting_tasks.append((task_id, username, python_command, model_size, inference))
+            
+            for task_id, username, python_command, model_size, inference in waiting_tasks:
+                self.waiting_tasks.push((task_id, username, python_command, model_size, inference))
+                
+            LOGGER.info("Waiting Task Size: " + str(self.waiting_tasks.size()))
+            
+            if not msg_sent:
+                LOGGER.error("No available worker ID found for the next task.")
         elif sys.argv[1] == SCHEDULING_ALGORITHMS[1]:
             task_id, username, python_command = self.waiting_tasks[free_worker_id].get()
             self.send_msg_to_worker(task_id, username, python_command, free_worker_id)
