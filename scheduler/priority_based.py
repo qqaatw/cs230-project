@@ -25,13 +25,12 @@ class PriorityQueue:
     
     def push(self, task):
         heapq.heappush(self.queue, task)
-        self.index += 1
     
     def pop(self):
         return heapq.heappop(self.queue)
     
     def empty(self):
-        return self.queue.empty()
+        return len(self.queue) == 0
     
     def size(self):
         return len(self.queue)

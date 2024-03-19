@@ -131,6 +131,7 @@ class Scheduler:
                 waiting_task = self.waiting_tasks.pop()
                 if free_worker_id == self.next_worker(waiting_task.size):
                     self.send_msg_to_worker(waiting_task.task_id, waiting_task.username, waiting_task.python_command, free_worker_id)
+                    LOGGER.info("Task ID: " + str(waiting_task.task_id) + ", Model Size: " + str(waiting_task.size) + ", Worker ID: " + str(free_worker_id))
                     msg_sent = True
                     break
                 else:
@@ -178,6 +179,7 @@ class Scheduler:
             # If available put task into ongoing_tasks & send message to the available worker
             if next_worker_id != None:
                 self.send_msg_to_worker(task_id, username, python_command, next_worker_id)
+                LOGGER.info("Task ID: " + str(task_id) + ", Model Size: " + str(model_size) + ", Worker ID: " + str(next_worker_id))
                 deleted.append(task_id)
             # If not put task into waiting_tasks queue
             else:
@@ -245,7 +247,7 @@ class Scheduler:
                 )
                 self.new_tasks[task_id]["python_command"] = python_command
                 self.new_tasks[task_id]["model_size"] = message["metrics"]["num_params"] * message["metrics"]["precision"]
-                self.new_tasks[task_id]["num_iterations"] = 0 # TODO
+                self.new_tasks[task_id]["num_iterations"] = 0
 
     # 2-3. Consume message (task_status) from workers
     # 2-3. If task is completed, Delete from ongoing_tasks & Put waiting task into ongoing_tasks and send start message to worker
