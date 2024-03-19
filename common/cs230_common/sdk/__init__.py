@@ -163,7 +163,7 @@ class SDK:
         return body["task_id"]
 
     def upload_task(
-        self, task_id: int, file_list: list[str], python_command: str, metrics: dict
+        self, task_id: int, file_list: list[str], python_command: str, metrics: dict, inference: bool
     ):
         """Upload user code and notify the scheduler.
 
@@ -189,6 +189,7 @@ class SDK:
                 "task_id": task_id,
                 "python_command": python_command,
                 "metrics": metrics,
+                "inference": inference,
             },
         )
         self.messenger.produce(message, Channels.api_to_scheduler)

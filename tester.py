@@ -82,6 +82,7 @@ def main(sdk: SDK, args, general_args, hyperparameter_args):
             file_list=["resnset_train.py"],
             python_command=python_command,
             metrics=metrics,
+            inference=hyperparameter_args.inference,
         )
         time.sleep(args.task_creating_interval)
 
