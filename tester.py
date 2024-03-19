@@ -54,9 +54,13 @@ def main(sdk: SDK, args, general_args, hyperparameter_args):
 
     task_ids = set()
 
-    for model_name in args.models:
+    for idx, model_name in enumerate(args.models, 1):
         model = model_map[model_name]()
         metrics = sdk.measure_parameters(model)
+        metrics.update({"num_iterations": args.num_epochs})
+        
+        print(idx, model_name, metrics)
+        
         task_id = sdk.request_scheduling()
         task_ids.add(task_id)
         python_command = " ".join(
