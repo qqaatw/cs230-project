@@ -24,8 +24,33 @@ Deploy with docker from docker hub:
 
 ## `config.json`
 
-The FTP server and broker host can be set up in the `worker/config.json` file.
-
+The RabitMQ broker, FTP server, and the GPU capacity of each worker should be set up in the `worker/config.json` file.
+```json
+    "broker" : {
+        "broker_host": "18.119.97.104",
+        "broker_port": "5673",
+        "topics": {
+            "broker_scheduling_topic": "node_1_scheduling"
+        }
+    },
+    ...
+    "ftp" : {
+        "ftp_host": "169.234.56.23",
+        "ftp_port": "21"
+    },
+    "workers": {
+        "1": {
+            "GPU": 8589934592
+        },
+        "2": {
+            "GPU": 2147483648
+        },
+        "3": {
+            "GPU": 0
+        }
+    },
+    ...
+```
 ## Launch
 
 **Scheduler**
