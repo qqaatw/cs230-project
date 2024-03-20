@@ -22,6 +22,10 @@ Deploy with docker from docker hub:
 
 1. Install common library with `pip install -e .` command under `common` directory.
 
+## `config.json`
+
+The FTP server and broker host can be set up in the `worker/config.json` file.
+
 ## Launch
 
 **Scheduler**
