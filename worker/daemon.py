@@ -103,15 +103,12 @@ def run_task(body, config):
         password="test",
     )
     FTPServer.fetch_file(task_id)
-    conda_manager = CondaManager(config["env"]["name"], config["env"]["path"])
-    tempdir_name = conda_manager.build()
+    #conda_manager = CondaManager(config["env"]["name"], config["env"]["path"])
+    #tempdir_name = conda_manager.build()
+    tempdir_name = "cs230"
     os.chdir(str(task_id))
 
-    conda_command = "conda run -p {1} {2}".format(
-        task_id,
-        os.path.join(os.path.dirname(__file__).replace("\\\\", "\\"), tempdir_name),
-        body["python_command"],
-    )
+    conda_command = body["python_command"]
     print(f"Running task_id: {task_id} Command: {conda_command}")
 
     env = os.environ.copy()
