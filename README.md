@@ -24,7 +24,7 @@ Deploy with docker from docker hub:
 
 ## `config.json`
 
-The RabitMQ broker, FTP server, and the GPU capacity of each worker should be set up in the `worker/config.json` file.
+The RabbitMQ broker, FTP server, and the GPU capacity of each worker should be set up in the `worker/config.json` file.
 ```json
     "broker" : {
         "broker_host": "18.119.97.104",
