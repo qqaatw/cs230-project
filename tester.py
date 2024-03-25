@@ -25,7 +25,12 @@ num_dot = 0
 
 
 def args_to_str(args):
-    return " ".join((("--inference" if v else "") if k == "inference" else f"--{k} {v}" for k, v in vars(args).items()))
+    return " ".join(
+        (
+            ("--inference" if v else "") if k == "inference" else f"--{k} {v}"
+            for k, v in vars(args).items()
+        )
+    )
 
 
 def print_log(log, ending="\r"):
@@ -53,7 +58,6 @@ def main(sdk: SDK, args, general_args, hyperparameter_args):
     else:
         inference_flags = random.choices([True, False], k=args.num_tasks)
 
-
     assert (
         args.num_tasks == len(args.models)
     ), f"The number of tasks ({args.num_tasks}) should match the number of models ({len(args.models)})"
@@ -67,7 +71,9 @@ def main(sdk: SDK, args, general_args, hyperparameter_args):
         hyperparameter_args.inference = inference
         hyperparameter_args.model = model_name
 
-        print(f"ID: {idx} Model Name: {model_name} Metrics: {metrics} Inference: {inference}")
+        print(
+            f"ID: {idx} Model Name: {model_name} Metrics: {metrics} Inference: {inference}"
+        )
 
         task_id = sdk.request_scheduling()
         task_ids.add(task_id)
