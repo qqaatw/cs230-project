@@ -163,7 +163,12 @@ class SDK:
         return body["task_id"]
 
     def upload_task(
-        self, task_id: int, file_list: list[str], python_command: str, metrics: dict, inference: bool
+        self,
+        task_id: int,
+        file_list: list[str],
+        python_command: str,
+        metrics: dict,
+        inference: bool,
     ):
         """Upload user code and notify the scheduler.
 
@@ -200,8 +205,7 @@ class SDK:
             "precision": next(model.parameters()).element_size(),
         }
 
-    def get_scheduling_status(self):
-        ...
+    def get_scheduling_status(self): ...
 
     @staticmethod
     def launch(sdk, fn: callable, *args, **kwargs):
