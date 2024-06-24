@@ -65,7 +65,6 @@ def main(sdk, args):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
-
     if not args.inference:
         # Training loop
         total_steps = len(train_loader)
