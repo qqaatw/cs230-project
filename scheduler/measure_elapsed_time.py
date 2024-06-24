@@ -1,5 +1,6 @@
 from datetime import datetime
 
+
 class Elapsed_Time_Tracker:
     def __init__(self):
         self.start_time = None

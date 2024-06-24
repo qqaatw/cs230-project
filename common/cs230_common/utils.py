@@ -63,7 +63,9 @@ def get_hyperparameters_parser() -> ArgumentParser:
     group.add_argument("--num_classes", type=int, default=10, help="Number of classes")
     group.add_argument("--num_epochs", type=int, default=1, help="Number of epochs")
     group.add_argument("--batch_size", type=int, default=64, help="Batch size")
-    group.add_argument("--inference", action="store_true", help="Whether the task is inference only")
+    group.add_argument(
+        "--inference", action="store_true", help="Whether the task is inference only"
+    )
     group.add_argument(
         "--learning_rate", type=float, default=0.001, help="Learning rate"
     )
