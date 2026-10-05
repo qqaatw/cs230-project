@@ -58,9 +58,9 @@ def main(sdk: SDK, args, general_args, hyperparameter_args):
     else:
         inference_flags = random.choices([True, False], k=args.num_tasks)
 
-    assert (
-        args.num_tasks == len(args.models)
-    ), f"The number of tasks ({args.num_tasks}) should match the number of models ({len(args.models)})"
+    assert args.num_tasks == len(args.models), (
+        f"The number of tasks ({args.num_tasks}) should match the number of models ({len(args.models)})"
+    )
 
     task_ids = set()
 
